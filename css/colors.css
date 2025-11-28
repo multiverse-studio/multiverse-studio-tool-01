@@ -1,0 +1,63 @@
+/* Color Bar */
+.color-bar {
+    width: 280px;
+    height: 40px;
+    margin-top: 25px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    gap: 10px;
+}
+
+.color-bar-track {
+    position: absolute;
+    width: 100%;
+    height: 40px;
+    border: 0.5px solid #7c7c7c;
+    border-radius: 10px;
+    background-color: transparent;
+    z-index: 0;
+}
+
+.color-button {
+    cursor: pointer;
+    transition: transform 0.2s;
+    z-index: 1;
+}
+
+.color-button:hover {
+    transform: scale(1.1);
+}
+
+.color-button:active {
+    transform: scale(0.95);
+}
+
+.color-button-outer {
+    width: 18px;
+    height: 18px;
+    border: 0.5px solid #7c7c7c;
+    border-radius: 50%;
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.color-button-inner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 0.5px solid #7c7c7c;
+}
+
+.color-label {
+    font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    color: #000000;
+    text-align: center;
+    user-select: none;
+    z-index: 1;
+}

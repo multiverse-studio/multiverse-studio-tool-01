@@ -1,0 +1,224 @@
+/* Panel Middle */
+.panel-middle {
+    padding: 20px 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+/* Tab Toggle Indicators */
+.tab-toggles-container {
+    display: flex;
+    gap: 10px;
+    width: 280px;
+    margin-bottom: 4px;
+}
+
+.tab-toggle-group {
+    width: 80px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab-toggle-group:nth-child(2) {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.toggle-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 0.5px solid #7c7c7c;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toggle-dot-green {
+    background-color: transparent;
+}
+
+.toggle-dot-green.active {
+    background-color: #4CAF50;
+}
+
+.toggle-dot-red {
+    background-color: transparent;
+}
+
+.toggle-dot-red.active {
+    background-color: #f44336;
+}
+
+/* Tab Buttons */
+.tab-buttons {
+    display: flex;
+    gap: 10px;
+    width: 280px;
+    margin-bottom: 8px;
+}
+
+/* Spacer for toggle area - fixed height */
+.tab-content-spacer {
+    height: 28px;
+    width: 280px;
+}
+
+.tab-btn {
+    width: 80px;
+    height: 26px;
+    border: 0.5px solid #7c7c7c;
+    border-radius: 4px;
+    background-color: transparent;
+    color: #000000;
+    font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 0;
+}
+
+.tab-btn:hover {
+    background-color: #f0f0f0;
+}
+
+.tab-btn.active {
+    background-color: #606060;
+    color: #ffffff;
+}
+
+.tab-btn:nth-child(2) {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Horizontal Sliders */
+.horizontal-sliders-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 280px;
+    margin-top: auto;
+    padding-bottom: 12px;
+}
+
+.horizontal-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.h-slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.h-slider-label {
+    font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    color: #000000;
+    user-select: none;
+}
+
+.h-slider-value {
+    font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
+    font-weight: 700;
+    font-size: 9px;
+    color: #000000;
+    user-select: none;
+}
+
+.h-slider-track-container {
+    width: 100%;
+    position: relative;
+    height: 26px;
+    display: flex;
+    align-items: center;
+}
+
+.h-slider-track {
+    width: 100%;
+    height: 26px;
+    border: 0.5px solid #7c7c7c;
+    border-radius: 13px;
+    background-color: transparent;
+    position: relative;
+    cursor: pointer;
+}
+
+.h-slider-track::before {
+    content: '';
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    top: 50%;
+    height: 0.5px;
+    background-color: #7c7c7c;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.h-slider-handle {
+    width: 12px;
+    height: 12px;
+    border: 0.5px solid #000000;
+    border-radius: 50%;
+    background-color: #f2f2f2;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    transition: background-color 0.2s;
+    z-index: 2;
+}
+
+.h-slider-handle:active {
+    cursor: grabbing;
+    background-color: #e0e0e0;
+}
+
+/* Apply to Text Toggles */
+.apply-text-toggles-row {
+    display: flex;
+    gap: 24px;
+    width: 280px;
+    margin-bottom: 12px;
+    min-height: 28px;
+}
+
+.apply-text-toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.apply-text-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 0.5px solid #7c7c7c;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.apply-text-dot.active {
+    background-color: #000000;
+}
+
+.apply-text-label {
+    font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
+    font-weight: 400;
+    font-size: 10px;
+    color: #000000;
+    user-select: none;
+}
