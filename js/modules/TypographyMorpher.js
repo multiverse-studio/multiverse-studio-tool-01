@@ -53,13 +53,13 @@ class TypographyMorpher {
         ctx.drawingContext.font = `${layer.fontWeight} ${layer.fontSize}px "Inter", sans-serif`;
         ctx.drawingContext.textAlign = 'center';
         ctx.drawingContext.textBaseline = 'middle';
-
+        
         // Use black internally if effects active, otherwise use layer colors
         const textColor = useInternalBW ? '#000000' : (layer.fillColor || '#000000');
         // Stroke always uses background color
         const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
         const strokeColor = useInternalBW ? '#FFFFFF' : backColor;
-
+        
         ctx.drawingContext.fillStyle = textColor;
         if (layer.strokeWidth > 0) {
             ctx.drawingContext.strokeStyle = strokeColor;

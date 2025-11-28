@@ -3,21 +3,21 @@
 // Tab configuration with slider labels (only 4 sliders now)
 const tabConfig = {
     grid: [
-        'COLS',
+        'GRID',
         'GAP',
-        'ANIM',
+        'FREQUENCY',
         'NOISE'
     ],
     secondo: [
-        'THRESH',
+        'THRESHOLD',
         'BLUR',
-        'CONTR',
-        'BRIGHT'
+        'CONTRAST',
+        'BRIGHTNESS'
     ],
     terzo: [
         'DOTS',
         'SPREAD',
-        'CONTR',
+        'CONTRAST',
         'NOISE'
     ]
 };

@@ -19,7 +19,7 @@
 .slider-label-bottom {
     font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
     font-weight: 400;
-    font-size: 10px;
+    font-size: 9px;
     color: #7c7c7c;
     text-align: center;
     user-select: none;
@@ -32,7 +32,7 @@
 .slider-value-bottom {
     font-family: 'TWKEverett', 'Roboto Mono', sans-serif;
     font-weight: 500;
-    font-size: 9px;
+    font-size: 8px;
     color: #000000;
     text-align: center;
     user-select: none;
@@ -65,5 +65,5 @@
 
 .slider-handle:active {
     cursor: grabbing;
-    background-color: #e0e0e0;
+    background-color: #FF164B;
 }

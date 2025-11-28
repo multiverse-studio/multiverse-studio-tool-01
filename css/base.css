@@ -11,7 +11,8 @@
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     margin: 0;
     padding: 0;
     width: 100%;
@@ -21,15 +22,22 @@ html, body {
     background-color: #1a1a1a;
 }
 
-button, .control-btn, .tab-btn, .color-button, [role="button"], a {
+button,
+.control-btn,
+.tab-btn,
+.color-button,
+[role="button"],
+a {
     cursor: pointer;
 }
 
-.slider-handle, .h-slider-handle {
+.slider-handle,
+.h-slider-handle {
     cursor: grab;
 }
 
-.slider-handle:active, .h-slider-handle:active {
+.slider-handle:active,
+.h-slider-handle:active {
     cursor: grabbing;
 }
 

@@ -8,26 +8,26 @@ let currentPickerColor = '#000000';
 // HSL to RGB conversion
 function hslToRgb(h, s, l) {
     let r, g, b;
-
+    
     if (s === 0) {
         r = g = b = l;
     } else {
         const hue2rgb = (p, q, t) => {
             if (t < 0) t += 1;
             if (t > 1) t -= 1;
-            if (t < 1 / 6) return p + (q - p) * 6 * t;
-            if (t < 1 / 2) return q;
-            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
             return p;
         };
-
+        
         const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
         const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1 / 3);
+        r = hue2rgb(p, q, h + 1/3);
         g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1 / 3);
+        b = hue2rgb(p, q, h - 1/3);
     }
-
+    
     return {
         r: Math.round(r * 255),
         g: Math.round(g * 255),
@@ -40,24 +40,24 @@ function rgbToHsl(r, g, b) {
     r /= 255;
     g /= 255;
     b /= 255;
-
+    
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     let h, s, l = (max + min) / 2;
-
+    
     if (max === min) {
         h = s = 0;
     } else {
         const d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-
+        
         switch (max) {
             case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
             case g: h = ((b - r) / d + 2) / 6; break;
             case b: h = ((r - g) / d + 4) / 6; break;
         }
     }
-
+    
     return { h, s, l };
 }
 
@@ -95,7 +95,7 @@ function createCustomColorPicker() {
         z-index: 10000;
         display: none;
     `;
-
+    
     customPickerContainer.innerHTML = `
         <div class="picker-main" style="display: flex; gap: 10px;">
             <!-- Saturation/Lightness area -->
@@ -118,9 +118,9 @@ function createCustomColorPicker() {
             <button class="picker-ok-btn" style="height: 24px; padding: 0 12px; background: #000; color: #fff; border: none; border-radius: 4px; font-family: inherit; font-size: 10px; cursor: pointer; flex-shrink: 0;">OK</button>
         </div>
     `;
-
+    
     document.body.appendChild(customPickerContainer);
-
+    
     // Prevent clicks inside picker from propagating to canvas
     customPickerContainer.addEventListener('mousedown', (e) => {
         e.stopPropagation();
@@ -128,10 +128,10 @@ function createCustomColorPicker() {
     customPickerContainer.addEventListener('click', (e) => {
         e.stopPropagation();
     });
-
+    
     // Initialize canvases
     initPickerCanvases();
-
+    
     // Close when clicking outside
     document.addEventListener('click', (e) => {
         if (customPickerContainer && customPickerContainer.style.display !== 'none') {
@@ -140,11 +140,11 @@ function createCustomColorPicker() {
             }
         }
     });
-
+    
     customPickerContainer.querySelector('.picker-ok-btn').addEventListener('click', () => {
         closeCustomPicker();
     });
-
+    
     const hexInput = customPickerContainer.querySelector('.picker-hex-input');
     hexInput.addEventListener('input', (e) => {
         let val = e.target.value;
@@ -167,7 +167,7 @@ let pickerLight = 0.5;
 function initPickerCanvases() {
     const slCanvas = customPickerContainer.querySelector('.picker-sl');
     const hueCanvas = customPickerContainer.querySelector('.picker-hue');
-
+    
     // Draw hue bar
     const hueCtx = hueCanvas.getContext('2d');
     const hueGradient = hueCtx.createLinearGradient(0, 0, 0, 180);
@@ -177,38 +177,38 @@ function initPickerCanvases() {
     }
     hueCtx.fillStyle = hueGradient;
     hueCtx.fillRect(0, 0, 20, 180);
-
+    
     // Draw SL area
     drawSLCanvas();
-
+    
     // SL canvas interactions
     let isDraggingSL = false;
-
+    
     slCanvas.addEventListener('mousedown', (e) => {
         isDraggingSL = true;
         updateSLFromMouse(e);
     });
-
+    
     document.addEventListener('mousemove', (e) => {
         if (isDraggingSL) updateSLFromMouse(e);
     });
-
+    
     document.addEventListener('mouseup', () => {
         isDraggingSL = false;
     });
-
+    
     // Hue canvas interactions
     let isDraggingHue = false;
-
+    
     hueCanvas.addEventListener('mousedown', (e) => {
         isDraggingHue = true;
         updateHueFromMouse(e);
     });
-
+    
     document.addEventListener('mousemove', (e) => {
         if (isDraggingHue) updateHueFromMouse(e);
     });
-
+    
     document.addEventListener('mouseup', () => {
         isDraggingHue = false;
     });
@@ -219,17 +219,17 @@ function drawSLCanvas() {
     const ctx = slCanvas.getContext('2d');
     const width = 180;
     const height = 180;
-
+    
     // Create image data for pixel manipulation
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
-
+    
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const s = x / width;
             const l = 1 - (y / height);
             const rgb = hslToRgb(pickerHue, s, l);
-
+            
             const idx = (y * width + x) * 4;
             data[idx] = rgb.r;
             data[idx + 1] = rgb.g;
@@ -237,7 +237,7 @@ function drawSLCanvas() {
             data[idx + 3] = 255;
         }
     }
-
+    
     ctx.putImageData(imageData, 0, 0);
 }
 
@@ -246,10 +246,10 @@ function updateSLFromMouse(e) {
     const rect = slCanvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(180, e.clientX - rect.left));
     const y = Math.max(0, Math.min(180, e.clientY - rect.top));
-
+    
     pickerSat = x / 180;
     pickerLight = 1 - (y / 180);
-
+    
     updateCursors();
     updateColorFromHSL();
 }
@@ -258,9 +258,9 @@ function updateHueFromMouse(e) {
     const hueCanvas = customPickerContainer.querySelector('.picker-hue');
     const rect = hueCanvas.getBoundingClientRect();
     const y = Math.max(0, Math.min(180, e.clientY - rect.top));
-
+    
     pickerHue = y / 180;
-
+    
     drawSLCanvas();
     updateCursors();
     updateColorFromHSL();
@@ -269,10 +269,10 @@ function updateHueFromMouse(e) {
 function updateCursors() {
     const slCursor = customPickerContainer.querySelector('.picker-sl-cursor');
     const hueCursor = customPickerContainer.querySelector('.picker-hue-cursor');
-
+    
     slCursor.style.left = (pickerSat * 180) + 'px';
     slCursor.style.top = ((1 - pickerLight) * 180) + 'px';
-
+    
     hueCursor.style.top = (pickerHue * 180) + 'px';
 }
 
@@ -280,7 +280,7 @@ function updateColorFromHSL() {
     const rgb = hslToRgb(pickerHue, pickerSat, pickerLight);
     currentPickerColor = rgbToHex(rgb.r, rgb.g, rgb.b);
     updatePreview();
-
+    
     // Live update
     if (currentPickerCallback) {
         currentPickerCallback(currentPickerColor);
@@ -290,7 +290,7 @@ function updateColorFromHSL() {
 function updatePreview() {
     const preview = customPickerContainer.querySelector('.picker-preview');
     const hexInput = customPickerContainer.querySelector('.picker-hex-input');
-
+    
     preview.style.backgroundColor = currentPickerColor;
     hexInput.value = currentPickerColor.toUpperCase();
 }
@@ -298,11 +298,11 @@ function updatePreview() {
 function updatePickerFromColor(hex) {
     const rgb = hexToRgb(hex);
     const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-
+    
     pickerHue = hsl.h;
     pickerSat = hsl.s;
     pickerLight = hsl.l;
-
+    
     drawSLCanvas();
     updateCursors();
 }
@@ -311,40 +311,40 @@ function openCustomPicker(initialColor, callback, buttonElement) {
     if (!customPickerContainer) {
         createCustomColorPicker();
     }
-
+    
     currentPickerColor = initialColor || '#000000';
     currentPickerCallback = callback;
-
+    
     updatePickerFromColor(currentPickerColor);
     updatePreview();
-
+    
     // Position near the button
     if (buttonElement) {
         const rect = buttonElement.getBoundingClientRect();
         const pickerWidth = 240;
         const pickerHeight = 240;
-
+        
         let left = rect.right + 10;
         let top = rect.top;
-
+        
         // Check if it goes off screen right
         if (left + pickerWidth > window.innerWidth) {
             left = rect.left - pickerWidth - 10;
         }
-
+        
         // Check if it goes off screen bottom
         if (top + pickerHeight > window.innerHeight) {
             top = window.innerHeight - pickerHeight - 10;
         }
-
+        
         // Ensure not negative
         left = Math.max(10, left);
         top = Math.max(10, top);
-
+        
         customPickerContainer.style.left = left + 'px';
         customPickerContainer.style.top = top + 'px';
     }
-
+    
     customPickerContainer.style.display = 'block';
 }
 

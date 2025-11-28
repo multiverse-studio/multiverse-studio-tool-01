@@ -60,10 +60,10 @@ function setup() {
 
             if (newWidth > 0 && newHeight > 0) {
                 resizeCanvas(newWidth, newHeight);
-
+                
                 // Update image positions based on relative coords
                 updateImagePositionsOnResize(newWidth, newHeight);
-
+                
                 // Grid dimensions are calculated in GridDistorter.generate()
                 regenerateAll();
             }
@@ -106,7 +106,7 @@ function draw() {
     const thresholdActive = PARAMS.showImageEffects && PARAMS.imageEffects.thresholdEnabled;
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
     const useInternalBW = thresholdActive || ditheringActive;
-
+    
     // Use white background internally if effects active, otherwise use chosen color
     if (useInternalBW) {
         background('#FFFFFF');
@@ -151,7 +151,7 @@ function draw() {
         if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
             drawImageBoundingBox(images[selectedImageIndex]);
         }
-
+        
         // Draw text selection box
         if (PARAMS.showTypography && PARAMS.typography.selectedLayer >= 0 && PARAMS.typography.layers[PARAMS.typography.selectedLayer]) {
             drawTextBoundingBox();
@@ -163,28 +163,28 @@ function draw() {
 // Effects are always applied to everything including text
 function applyImageEffects() {
     const fx = PARAMS.imageEffects;
-
+    
     // Check if dithering is active - if so, skip threshold (dithering handles binarization)
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
-
+    
     // Build CSS filter string for GPU-accelerated effects
     let filterString = '';
-
+    
     // Apply brightness (50-150% -> 0.5-1.5)
     if (fx.brightness !== 100) {
         filterString += `brightness(${fx.brightness / 100}) `;
     }
-
+    
     // Apply contrast (50-150% -> 0.5-1.5)
     if (fx.contrast !== 100) {
         filterString += `contrast(${fx.contrast / 100}) `;
     }
-
+    
     // Apply blur
     if (fx.blurEnabled && fx.blur > 0) {
         filterString += `blur(${fx.blur}px) `;
     }
-
+    
     // Apply CSS filters (fast, GPU-accelerated)
     if (filterString) {
         const tempCanvas = document.createElement('canvas');
@@ -192,12 +192,12 @@ function applyImageEffects() {
         tempCanvas.height = height;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(drawingContext.canvas, 0, 0);
-
+        
         drawingContext.filter = filterString.trim();
         drawingContext.drawImage(tempCanvas, 0, 0);
         drawingContext.filter = 'none';
     }
-
+    
     // Apply threshold ONLY if dithering is NOT active
     // (dithering does its own binarization with pattern)
     if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
@@ -217,7 +217,7 @@ function applyThreshold(thresholdValue) {
     // Get colors from PARAMS
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
     const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
-
+    
     // Cache RGB conversion (only recalculate if colors changed)
     if (textColor !== cachedTextColor) {
         cachedDarkRGB = hexToRGB(textColor);
@@ -227,26 +227,26 @@ function applyThreshold(thresholdValue) {
         cachedLightRGB = hexToRGB(backColor);
         cachedBackColor = backColor;
     }
-
+    
     const darkR = cachedDarkRGB.r;
     const darkG = cachedDarkRGB.g;
     const darkB = cachedDarkRGB.b;
     const lightR = cachedLightRGB.r;
     const lightG = cachedLightRGB.g;
     const lightB = cachedLightRGB.b;
-
+    
     loadPixels();
-
+    
     const d = pixelDensity();
     const totalPixels = (width * d) * (height * d) * 4;
     const pix = pixels; // Local reference for speed
     const thresh = thresholdValue;
-
+    
     // Optimized loop with local variables
     for (let i = 0; i < totalPixels; i += 4) {
         // Fast grayscale (approximate, but faster)
         const gray = (pix[i] * 77 + pix[i + 1] * 150 + pix[i + 2] * 29) >> 8;
-
+        
         if (gray > thresh) {
             pix[i] = lightR;
             pix[i + 1] = lightG;
@@ -257,7 +257,7 @@ function applyThreshold(thresholdValue) {
             pix[i + 2] = darkB;
         }
     }
-
+    
     updatePixels();
 }
 
@@ -265,12 +265,12 @@ function applyThreshold(thresholdValue) {
 function hexToRGB(hex) {
     // Remove # if present
     hex = hex.replace('#', '');
-
+    
     // Parse hex values
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
-
+    
     return { r, g, b };
 }
 
@@ -282,60 +282,60 @@ function hexToRGB(hex) {
 function applyDithering() {
     const dith = PARAMS.dithering;
     if (!dith.enabled || dith.dots < 1) return;
-
+    
     const scale = dith.dots;
     const spread = dith.spread;
     const contrastMult = dith.contrast / 100;
     const noiseAmt = dith.noise;
-
+    
     // Get colors from PARAMS
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
     const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
     const darkRGB = hexToRGB(textColor);
     const lightRGB = hexToRGB(backColor);
-
+    
     loadPixels();
-
+    
     const d = pixelDensity();
     const w = Math.floor(width * d);
     const h = Math.floor(height * d);
-
+    
     // Work on scaled down version for performance
     const scaledW = Math.floor(w / scale);
     const scaledH = Math.floor(h / scale);
-
+    
     // Create grayscale buffer with contrast
     const gray = new Float32Array(scaledW * scaledH);
-
+    
     for (let y = 0; y < scaledH; y++) {
         for (let x = 0; x < scaledW; x++) {
             // Sample from center of scaled pixel
             const srcX = Math.floor(x * scale + scale / 2);
             const srcY = Math.floor(y * scale + scale / 2);
             const srcIdx = (srcY * w + srcX) * 4;
-
+            
             // Get luminance
             const r = pixels[srcIdx];
             const g = pixels[srcIdx + 1];
             const b = pixels[srcIdx + 2];
-
+            
             // Calculate luminance
             let lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-
+            
             // Apply contrast boost
             lum = (lum - 0.5) * contrastMult + 0.5;
             lum = Math.max(0, Math.min(1, lum));
-
+            
             // Add noise
             if (noiseAmt > 0) {
                 lum += (Math.random() - 0.5) * noiseAmt;
                 lum = Math.max(0, Math.min(1, lum));
             }
-
+            
             gray[y * scaledW + x] = lum;
         }
     }
-
+    
     // Floyd-Steinberg dithering
     for (let y = 0; y < scaledH; y++) {
         for (let x = 0; x < scaledW; x++) {
@@ -343,9 +343,9 @@ function applyDithering() {
             const oldVal = gray[idx];
             const newVal = oldVal > 0.5 ? 1 : 0;
             gray[idx] = newVal;
-
+            
             const error = (oldVal - newVal) * spread;
-
+            
             // Distribute error to neighbors
             if (x + 1 < scaledW) {
                 gray[idx + 1] += error * 7 / 16;
@@ -361,13 +361,13 @@ function applyDithering() {
             }
         }
     }
-
+    
     // Write back to pixels at original scale
     for (let y = 0; y < scaledH; y++) {
         for (let x = 0; x < scaledW; x++) {
             const val = gray[y * scaledW + x] > 0.5 ? 1 : 0;
             const rgb = val === 1 ? lightRGB : darkRGB;
-
+            
             // Fill scaled pixel block
             for (let dy = 0; dy < scale; dy++) {
                 for (let dx = 0; dx < scale; dx++) {
@@ -383,7 +383,7 @@ function applyDithering() {
             }
         }
     }
-
+    
     updatePixels();
 }
 
@@ -396,7 +396,7 @@ window.applyImageEffects = applyImageEffects;
 function drawTextBoundingBox() {
     // Don't draw if no layer is selected
     if (PARAMS.typography.selectedLayer < 0) return;
-
+    
     const layer = PARAMS.typography.layers[PARAMS.typography.selectedLayer];
     if (!layer || !layer.visible) return;
 
@@ -408,19 +408,19 @@ function drawTextBoundingBox() {
     // Use canvas API to measure text with variable font
     drawingContext.font = `${layer.fontWeight} ${layer.fontSize}px "Inter", sans-serif`;
     const textString = layer.uppercase ? layer.text.toUpperCase() : layer.text;
-
+    
     // Split into lines and measure each
     const lines = textString.split('\n');
     const lineHeight = layer.fontSize * (layer.lineHeight || 1.2);
     const totalHeight = lines.length * lineHeight;
-
+    
     // Find widest line
     let maxWidth = 0;
     lines.forEach(line => {
         const lineWidth = drawingContext.measureText(line).width;
         if (lineWidth > maxWidth) maxWidth = lineWidth;
     });
-
+    
     const textW = maxWidth;
     const textH = totalHeight;
 
@@ -458,14 +458,14 @@ function drawTextBoundingBox() {
 
 function drawImageBoundingBox(img) {
     if (!img || !img.loaded) return;
-
+    
     push();
-
+    
     const halfW = img.width / 2;
     const halfH = img.height / 2;
     const x1 = img.x - halfW;
     const y1 = img.y - halfH;
-
+    
     // Dashed bounding box
     drawingContext.setLineDash([5, 5]);
     noFill();
@@ -473,21 +473,21 @@ function drawImageBoundingBox(img) {
     strokeWeight(2);
     rect(x1, y1, img.width, img.height);
     drawingContext.setLineDash([]);
-
+    
     // Corner resize handles
     const handleSize = 10;
     fill(0, 150, 255);
     noStroke();
-
+    
     // Top-left
-    rect(x1 - handleSize / 2, y1 - handleSize / 2, handleSize, handleSize);
+    rect(x1 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
     // Top-right
-    rect(x1 + img.width - handleSize / 2, y1 - handleSize / 2, handleSize, handleSize);
+    rect(x1 + img.width - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
     // Bottom-left
-    rect(x1 - handleSize / 2, y1 + img.height - handleSize / 2, handleSize, handleSize);
+    rect(x1 - handleSize/2, y1 + img.height - handleSize/2, handleSize, handleSize);
     // Bottom-right
-    rect(x1 + img.width - handleSize / 2, y1 + img.height - handleSize / 2, handleSize, handleSize);
-
+    rect(x1 + img.width - handleSize/2, y1 + img.height - handleSize/2, handleSize, handleSize);
+    
     // Center handle
     fill(0, 150, 255);
     circle(img.x, img.y, 14);
@@ -495,7 +495,7 @@ function drawImageBoundingBox(img) {
     textSize(10);
     textAlign(CENTER, CENTER);
     text('⋮⋮', img.x, img.y);
-
+    
     pop();
 }
 
@@ -539,7 +539,7 @@ function drawImagesByZIndex(zIndex) {
             imageMode(CENTER);
             image(img.img, img.x, img.y, img.width, img.height);
             pop();
-
+            
             // Draw selection UI if selected
             if (selectedImageIndex === i) {
                 drawImageSelection(img);
@@ -550,7 +550,7 @@ function drawImagesByZIndex(zIndex) {
 
 function drawImageSelection(img) {
     push();
-
+    
     // Bounding box
     const halfW = img.width / 2;
     const halfH = img.height / 2;
@@ -558,7 +558,7 @@ function drawImageSelection(img) {
     const y1 = img.y - halfH;
     const x2 = img.x + halfW;
     const y2 = img.y + halfH;
-
+    
     // Dashed border
     drawingContext.setLineDash([5, 5]);
     noFill();
@@ -566,40 +566,40 @@ function drawImageSelection(img) {
     strokeWeight(2);
     rect(x1, y1, img.width, img.height);
     drawingContext.setLineDash([]);
-
+    
     // Resize handles (corners)
     const handleSize = 10;
     fill(255);
     stroke(0, 150, 255);
     strokeWeight(2);
-
+    
     // Top-left
-    rect(x1 - handleSize / 2, y1 - handleSize / 2, handleSize, handleSize);
+    rect(x1 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
     // Top-right
-    rect(x2 - handleSize / 2, y1 - handleSize / 2, handleSize, handleSize);
+    rect(x2 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
     // Bottom-left
-    rect(x1 - handleSize / 2, y2 - handleSize / 2, handleSize, handleSize);
+    rect(x1 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
     // Bottom-right
-    rect(x2 - handleSize / 2, y2 - handleSize / 2, handleSize, handleSize);
-
+    rect(x2 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
+    
     pop();
 }
 
 function addImage(file) {
     const reader = new FileReader();
-    reader.onload = function (e) {
-        loadImage(e.target.result, function (loadedImg) {
+    reader.onload = function(e) {
+        loadImage(e.target.result, function(loadedImg) {
             // Calculate initial size (fit within canvas, max 50% of canvas size)
             const maxW = width * 0.5;
             const maxH = height * 0.5;
             let imgW = loadedImg.width;
             let imgH = loadedImg.height;
-
+            
             // Scale down if too large
             const scale = Math.min(maxW / imgW, maxH / imgH, 1);
             imgW *= scale;
             imgH *= scale;
-
+            
             const newImage = {
                 img: loadedImg,
                 x: width / 2,
@@ -616,13 +616,13 @@ function addImage(file) {
                 zIndex: 1,
                 loaded: true
             };
-
+            
             images.push(newImage);
             selectedImageIndex = images.length - 1;
-
+            
             // Deselect text when adding image
             PARAMS.typography.selectedLayer = -1;
-
+            
             redraw();
         });
     };
@@ -645,7 +645,7 @@ function openImagePicker() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = function (e) {
+    input.onchange = function(e) {
         if (e.target.files && e.target.files[0]) {
             addImage(e.target.files[0]);
         }
@@ -656,27 +656,27 @@ function openImagePicker() {
 function isMouseOverImage(img) {
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
-
+    
     const halfW = img.width / 2;
     const halfH = img.height / 2;
-
+    
     return mx >= img.x - halfW && mx <= img.x + halfW &&
-        my >= img.y - halfH && my <= img.y + halfH;
+           my >= img.y - halfH && my <= img.y + halfH;
 }
 
 function getResizeHandle(img) {
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
-
+    
     const halfW = img.width / 2;
     const halfH = img.height / 2;
     const handleSize = 15; // Slightly larger hit area
-
+    
     const x1 = img.x - halfW;
     const y1 = img.y - halfH;
     const x2 = img.x + halfW;
     const y2 = img.y + halfH;
-
+    
     // Check each corner
     if (mx >= x1 - handleSize && mx <= x1 + handleSize &&
         my >= y1 - handleSize && my <= y1 + handleSize) {
@@ -694,7 +694,7 @@ function getResizeHandle(img) {
         my >= y2 - handleSize && my <= y2 + handleSize) {
         return 'br';
     }
-
+    
     return null;
 }
 
@@ -734,10 +734,10 @@ function getCanvasMouseX() {
     // Get the canvas element position
     const canvas = document.querySelector('.canvas-content canvas');
     if (!canvas) return mouseX;
-
+    
     const rect = canvas.getBoundingClientRect();
     const scale = getScaleFactor();
-
+    
     // Calculate actual mouse position relative to canvas, compensating for scale
     const actualX = (window.mouseXGlobal - rect.left) / scale;
     return actualX;
@@ -747,10 +747,10 @@ function getCanvasMouseY() {
     // Get the canvas element position
     const canvas = document.querySelector('.canvas-content canvas');
     if (!canvas) return mouseY;
-
+    
     const rect = canvas.getBoundingClientRect();
     const scale = getScaleFactor();
-
+    
     // Calculate actual mouse position relative to canvas, compensating for scale
     const actualY = (window.mouseYGlobal - rect.top) / scale;
     return actualY;
@@ -795,7 +795,7 @@ function isMouseOverText(layer) {
     if (!layer || !layer.visible) return false;
 
     const pos = getTextPosition(layer);
-
+    
     // Use corrected mouse coordinates
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
@@ -823,18 +823,18 @@ function isMouseOverText(layer) {
     const boxH = textH + padding * 2;
 
     return mx >= boxX && mx <= boxX + boxW &&
-        my >= boxY && my <= boxY + boxH;
+           my >= boxY && my <= boxY + boxH;
 }
 
 function mousePressed() {
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
-
+    
     // Check if mouse is inside canvas bounds
     if (mx < 0 || mx > width || my < 0 || my > height) {
         return;
     }
-
+    
     // 1. Check if resizing selected image (handle click)
     if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
         const img = images[selectedImageIndex];
@@ -850,7 +850,7 @@ function mousePressed() {
             return;
         }
     }
-
+    
     // 2. Check if clicking on the currently selected text layer (priority)
     const selectedLayer = PARAMS.typography.layers[PARAMS.typography.selectedLayer];
     if (selectedLayer && selectedLayer.visible && isMouseOverText(selectedLayer)) {
@@ -862,26 +862,26 @@ function mousePressed() {
         cursor('grabbing');
         return;
     }
-
+    
     // 3. Check if clicking on any text layer (to select it)
     for (let i = PARAMS.typography.layers.length - 1; i >= 0; i--) {
         const layer = PARAMS.typography.layers[i];
         if (layer && layer.visible && isMouseOverText(layer)) {
             PARAMS.typography.selectedLayer = i;
             selectedImageIndex = -1; // Deselect image
-
+            
             isDraggingText = true;
             const pos = getTextPosition(layer);
             textDragOffsetX = mx - pos.x;
             textDragOffsetY = my - pos.y;
             cursor('grabbing');
-
+            
             updateUIForSelectedLayer();
             redraw();
             return;
         }
     }
-
+    
     // 4. Check if clicking on selected image (to drag)
     if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
         const img = images[selectedImageIndex];
@@ -893,25 +893,25 @@ function mousePressed() {
             return;
         }
     }
-
+    
     // 5. Check if clicking on any image (to select it)
     for (let i = images.length - 1; i >= 0; i--) {
         const img = images[i];
         if (img.loaded && isMouseOverImage(img)) {
             selectedImageIndex = i;
             PARAMS.typography.selectedLayer = -1; // Deselect text
-
+            
             isDraggingImage = true;
             imageDragOffsetX = mx - img.x;
             imageDragOffsetY = my - img.y;
             cursor('grabbing');
-
+            
             updateUIForSelectedLayer();
             redraw();
             return;
         }
     }
-
+    
     // 6. Clicked on empty space - deselect all
     PARAMS.typography.selectedLayer = -1;
     selectedImageIndex = -1;
@@ -922,15 +922,15 @@ function mousePressed() {
 function mouseDragged() {
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
-
+    
     // Handle image resize
     if (isResizingImage && selectedImageIndex >= 0) {
         const img = images[selectedImageIndex];
-
+        
         // Calculate distance moved
         const dx = mx - resizeStartX;
         const dy = my - resizeStartY;
-
+        
         // Use diagonal distance for proportional resize
         let delta;
         if (resizeHandle === 'br') {
@@ -942,36 +942,36 @@ function mouseDragged() {
         } else if (resizeHandle === 'bl') {
             delta = (-dx + dy) / 2;
         }
-
+        
         // Calculate new size maintaining aspect ratio
         const newWidth = Math.max(30, resizeStartWidth + delta);
         const newHeight = newWidth / img.aspectRatio;
-
+        
         img.width = newWidth;
         img.height = newHeight;
-
+        
         // Update relative dimensions
         img.relativeW = img.width / width;
         img.relativeH = img.height / height;
-
+        
         redraw();
         return;
     }
-
+    
     // Handle image drag
     if (isDraggingImage && selectedImageIndex >= 0) {
         const img = images[selectedImageIndex];
         img.x = mx - imageDragOffsetX;
         img.y = my - imageDragOffsetY;
-
+        
         // Update relative position
         img.relativeX = img.x / width;
         img.relativeY = img.y / height;
-
+        
         redraw();
         return;
     }
-
+    
     // Handle text drag
     if (isDraggingText && PARAMS.typography.selectedLayer >= 0) {
         const layer = PARAMS.typography.layers[PARAMS.typography.selectedLayer];
@@ -991,13 +991,13 @@ function mouseReleased() {
         cursor(ARROW);
         redraw();
     }
-
+    
     if (isDraggingImage) {
         isDraggingImage = false;
         cursor(ARROW);
         redraw();
     }
-
+    
     if (isDraggingText) {
         isDraggingText = false;
         cursor(ARROW);
@@ -1008,12 +1008,12 @@ function mouseReleased() {
 function mouseMoved() {
     const mx = getCanvasMouseX();
     const my = getCanvasMouseY();
-
+    
     // Check if mouse is inside canvas bounds
     if (mx < 0 || mx > width || my < 0 || my > height) {
         return;
     }
-
+    
     // Check if hovering over resize handles of selected image
     if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
         const img = images[selectedImageIndex];
@@ -1026,14 +1026,14 @@ function mouseMoved() {
             }
             return;
         }
-
+        
         // Check if hovering over selected image body
         if (isMouseOverImage(img)) {
             cursor('grab');
             return;
         }
     }
-
+    
     // Check if hovering over any image
     for (let i = images.length - 1; i >= 0; i--) {
         const img = images[i];
@@ -1042,7 +1042,7 @@ function mouseMoved() {
             return;
         }
     }
-
+    
     // Change cursor when hovering over any visible text layer
     for (let i = PARAMS.typography.layers.length - 1; i >= 0; i--) {
         const layer = PARAMS.typography.layers[i];
@@ -1061,11 +1061,11 @@ function mouseMoved() {
 function updateUIForSelectedLayer() {
     const layer = PARAMS.typography.layers[PARAMS.typography.selectedLayer];
     const textInput = document.getElementById('text-input');
-
+    
     if (layer && textInput) {
         // Update text input
         textInput.value = layer.text;
-
+        
         // Update sliders to reflect layer values
         updateSlidersForLayer(layer);
     } else if (textInput) {
@@ -1075,26 +1075,26 @@ function updateUIForSelectedLayer() {
 
 function updateSlidersForLayer(layer) {
     if (!layer) return;
-
+    
     // Helper to clamp values
     const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-
+    
     // SIZE slider (id 0): 20-500
     const sizeValue = 1 - clamp(Utils.mapRange(layer.fontSize, 20, 500, 0, 1), 0, 1);
     if (window.setSliderValue) window.setSliderValue(0, sizeValue);
-
+    
     // WEIGHT slider (id 1): 100-900
     const weightValue = 1 - clamp(Utils.mapRange(layer.fontWeight, 100, 900, 0, 1), 0, 1);
     if (window.setSliderValue) window.setSliderValue(1, weightValue);
-
+    
     // SPACING slider (id 2): -20 to 100
     const spacingValue = 1 - clamp(Utils.mapRange(layer.letterSpacing, -20, 100, 0, 1), 0, 1);
     if (window.setSliderValue) window.setSliderValue(2, spacingValue);
-
+    
     // LINE HEIGHT slider (id 3): 0.5-3.0
     const lineValue = 1 - clamp(Utils.mapRange(layer.lineHeight, 0.5, 3.0, 0, 1), 0, 1);
     if (window.setSliderValue) window.setSliderValue(3, lineValue);
-
+    
     // STROKE slider (id 4): 0-10
     const strokeValue = 1 - clamp(Utils.mapRange(layer.strokeWidth, 0, 10, 0, 1), 0, 1);
     if (window.setSliderValue) window.setSliderValue(4, strokeValue);
@@ -1125,10 +1125,10 @@ function addTextLayer() {
         uppercase: false,
         visible: true
     };
-
+    
     PARAMS.typography.layers.push(newLayer);
     PARAMS.typography.selectedLayer = PARAMS.typography.layers.length - 1;
-
+    
     updateUIForSelectedLayer();
     redraw();
 }
@@ -1136,14 +1136,14 @@ function addTextLayer() {
 function deleteSelectedLayer() {
     if (PARAMS.typography.selectedLayer >= 0 && PARAMS.typography.layers.length > 0) {
         PARAMS.typography.layers.splice(PARAMS.typography.selectedLayer, 1);
-
+        
         // Adjust selected index
         if (PARAMS.typography.layers.length === 0) {
             PARAMS.typography.selectedLayer = -1;
         } else if (PARAMS.typography.selectedLayer >= PARAMS.typography.layers.length) {
             PARAMS.typography.selectedLayer = PARAMS.typography.layers.length - 1;
         }
-
+        
         updateUIForSelectedLayer();
         redraw();
     }
@@ -1160,14 +1160,14 @@ window.updateUIForSelectedLayer = updateUIForSelectedLayer;
 
 function updateGridAnimation() {
     console.log('updateGridAnimation called, organicShift:', PARAMS.grid.organicShift);
-
+    
     // Stop existing animation if running
     if (gridAnimationId) {
         cancelAnimationFrame(gridAnimationId);
         gridAnimationId = null;
         isAnimating = false;
     }
-
+    
     // Start animation only if organicShift > 0
     if (PARAMS.grid.organicShift > 0.01) {
         console.log('Starting grid animation');
@@ -1182,7 +1182,7 @@ function updateGridAnimation() {
 function startGridAnimation() {
     if (isAnimating) return;
     isAnimating = true;
-
+    
     function animate() {
         if (PARAMS.grid.organicShift > 0.01 && isAnimating) {
             redraw();
