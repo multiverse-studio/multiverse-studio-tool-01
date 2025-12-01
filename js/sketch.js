@@ -14,6 +14,9 @@ let textDragOffsetY = 0;
 let gridAnimationId = null;
 let isAnimating = false;
 
+// Flag to track if canvas is tainted (for Safari fallback)
+let canvasIsTainted = false;
+
 // Images system
 let images = [];
 let isDraggingImage = false;
@@ -167,152 +170,219 @@ function draw() {
     }
 }
 
-// Apply ALL image effects (blur, contrast, brightness, threshold)
-// Effects are always applied to everything including text
+// Apply ALL image effects via pixel manipulation
+// Order: 1) Blur, 2) Brightness/Contrast, 3) Threshold
+// Dithering is applied AFTER this function (works on threshold result)
 function applyImageEffects() {
     const fx = PARAMS.imageEffects;
 
-    // Check if dithering is active - if so, skip threshold (dithering handles binarization)
-    const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
-
-    // Get canvas element for CSS filter approach
+    // Reset any CSS filters on canvas (we do everything via pixel manipulation now)
     const canvasElement = document.querySelector('.canvas-content canvas');
-    
-    // Build CSS filter string for blur/brightness/contrast
-    // These will be applied via CSS on the canvas element (works on all browsers including Safari)
-    let cssFilterString = '';
-
-    // Apply brightness (50-150% -> 0.5-1.5)
-    if (fx.brightness !== 100) {
-        cssFilterString += `brightness(${fx.brightness / 100}) `;
-    }
-
-    // Apply contrast (50-150% -> 0.5-1.5)
-    if (fx.contrast !== 100) {
-        cssFilterString += `contrast(${fx.contrast / 100}) `;
-    }
-
-    // Apply blur via CSS (Safari doesn't support ctx.filter for blur)
-    if (fx.blurEnabled && fx.blur > 0) {
-        cssFilterString += `blur(${fx.blur}px) `;
-    }
-
-    // Apply CSS filters on the canvas element (this works on Safari!)
     if (canvasElement) {
-        canvasElement.style.filter = cssFilterString.trim() || 'none';
+        canvasElement.style.filter = 'none';
     }
 
-    // Apply threshold using pixel manipulation (after CSS filters are applied visually)
-    // NOTE: threshold works on the raw canvas data, CSS filters are applied on top by the browser
-    if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
-        applyThreshold(fx.threshold);
-    }
-}
+    // Check if any effect is enabled
+    const hasBlur = fx.blurEnabled && fx.blur > 0;
+    const hasBrightness = fx.brightness !== 100;
+    const hasContrast = fx.contrast !== 100;
+    const hasThreshold = fx.thresholdEnabled && fx.threshold > 0;
 
-// Cached RGB values for threshold (avoid recalculating every frame)
-let cachedDarkRGB = null;
-let cachedLightRGB = null;
-let cachedTextColor = null;
-let cachedBackColor = null;
-
-// Flag to track if canvas is tainted (for Safari fallback)
-let canvasIsTainted = false;
-
-// Separate threshold function - OPTIMIZED
-// Uses text color for dark pixels and background color for light pixels
-// Safari-compatible version with CSS filter fallback
-function applyThreshold(thresholdValue) {
-    // Get colors from PARAMS
-    const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
-    const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
-
-    // Cache RGB conversion (only recalculate if colors changed)
-    if (textColor !== cachedTextColor) {
-        cachedDarkRGB = hexToRGB(textColor);
-        cachedTextColor = textColor;
-    }
-    if (backColor !== cachedBackColor) {
-        cachedLightRGB = hexToRGB(backColor);
-        cachedBackColor = backColor;
+    if (!hasBlur && !hasBrightness && !hasContrast && !hasThreshold) {
+        return; // No effects to apply
     }
 
-    const darkR = cachedDarkRGB.r;
-    const darkG = cachedDarkRGB.g;
-    const darkB = cachedDarkRGB.b;
-    const lightR = cachedLightRGB.r;
-    const lightG = cachedLightRGB.g;
-    const lightB = cachedLightRGB.b;
-
-    // Use canvas API directly for Safari compatibility
+    // Get canvas context and image data
     const ctx = drawingContext;
-    const w = Math.floor(width * pixelDensity());
-    const h = Math.floor(height * pixelDensity());
+    const d = pixelDensity();
+    const w = Math.floor(width * d);
+    const h = Math.floor(height * d);
 
-    // Safari security: wrap getImageData in try-catch
     let imageData;
     try {
         imageData = ctx.getImageData(0, 0, w, h);
         canvasIsTainted = false;
     } catch (e) {
-        // Canvas is tainted (cross-origin image) or Safari security restriction
-        console.warn('Threshold: using CSS filter fallback for Safari');
+        console.warn('applyImageEffects: Canvas tainted, using CSS fallback');
         canvasIsTainted = true;
-        // Use CSS filter fallback for Safari
-        applyThresholdCSSFallback(thresholdValue);
+        applyCSSFilterFallback(fx);
         return;
     }
-    
-    const data = imageData.data;
-    const thresh = thresholdValue;
 
-    // Process pixels
-    for (let i = 0; i < data.length; i += 4) {
-        // Fast grayscale (approximate, but faster)
-        const gray = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+    let data = imageData.data;
 
-        if (gray > thresh) {
-            data[i] = lightR;
-            data[i + 1] = lightG;
-            data[i + 2] = lightB;
-        } else {
-            data[i] = darkR;
-            data[i + 1] = darkG;
-            data[i + 2] = darkB;
+    // 1. Apply box blur (if enabled)
+    if (hasBlur) {
+        data = applyBoxBlur(data, w, h, Math.round(fx.blur));
+        // Copy blurred data back to imageData
+        for (let i = 0; i < data.length; i++) {
+            imageData.data[i] = data[i];
         }
     }
 
+    // 2. Apply brightness and contrast (if enabled)
+    if (hasBrightness || hasContrast) {
+        applyBrightnessContrast(imageData.data, fx.brightness, fx.contrast);
+    }
+
+    // 3. Apply threshold (if enabled and dithering is off)
+    if (hasThreshold) {
+        applyThresholdToData(imageData.data, fx.threshold);
+    }
+
+    // Put processed data back
     try {
         ctx.putImageData(imageData, 0, 0);
     } catch (e) {
-        console.warn('Failed to apply threshold:', e.message);
+        console.warn('Failed to put image data:', e.message);
     }
 }
 
-// CSS Filter fallback for Safari when canvas is tainted
-// Uses extreme contrast + grayscale to simulate threshold effect
-function applyThresholdCSSFallback(thresholdValue) {
-    const ctx = drawingContext;
+// Box blur implementation (fast approximation of Gaussian blur)
+function applyBoxBlur(data, w, h, radius) {
+    if (radius < 1) return data;
     
-    // Create a temporary canvas to apply the filter
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width * pixelDensity();
-    tempCanvas.height = height * pixelDensity();
-    const tempCtx = tempCanvas.getContext('2d');
+    // Limit radius for performance
+    radius = Math.min(radius, 20);
     
-    // Copy current canvas to temp
-    tempCtx.drawImage(ctx.canvas, 0, 0);
+    const output = new Uint8ClampedArray(data.length);
     
-    // Map threshold (30-80) to contrast value
-    // Lower threshold = more black, Higher threshold = more white
-    // We use extreme contrast (10-20x) + brightness adjustment to simulate threshold
-    const normalizedThresh = (thresholdValue - 30) / 50; // 0 to 1
-    const contrastValue = 15 + (normalizedThresh * 10); // 15x to 25x contrast
-    const brightnessValue = 0.5 + (normalizedThresh * 0.5); // 0.5 to 1.0
+    // Horizontal pass
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let r = 0, g = 0, b = 0, a = 0, count = 0;
+            
+            for (let dx = -radius; dx <= radius; dx++) {
+                const nx = x + dx;
+                if (nx >= 0 && nx < w) {
+                    const idx = (y * w + nx) * 4;
+                    r += data[idx];
+                    g += data[idx + 1];
+                    b += data[idx + 2];
+                    a += data[idx + 3];
+                    count++;
+                }
+            }
+            
+            const outIdx = (y * w + x) * 4;
+            output[outIdx] = r / count;
+            output[outIdx + 1] = g / count;
+            output[outIdx + 2] = b / count;
+            output[outIdx + 3] = a / count;
+        }
+    }
     
-    // Apply extreme contrast + grayscale to simulate threshold
-    ctx.filter = `grayscale(100%) contrast(${contrastValue}) brightness(${brightnessValue})`;
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.filter = 'none';
+    // Vertical pass (on output from horizontal)
+    const final = new Uint8ClampedArray(data.length);
+    
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let r = 0, g = 0, b = 0, a = 0, count = 0;
+            
+            for (let dy = -radius; dy <= radius; dy++) {
+                const ny = y + dy;
+                if (ny >= 0 && ny < h) {
+                    const idx = (ny * w + x) * 4;
+                    r += output[idx];
+                    g += output[idx + 1];
+                    b += output[idx + 2];
+                    a += output[idx + 3];
+                    count++;
+                }
+            }
+            
+            const outIdx = (y * w + x) * 4;
+            final[outIdx] = r / count;
+            final[outIdx + 1] = g / count;
+            final[outIdx + 2] = b / count;
+            final[outIdx + 3] = a / count;
+        }
+    }
+    
+    return final;
+}
+
+// Apply brightness and contrast to pixel data
+function applyBrightnessContrast(data, brightness, contrast) {
+    // brightness: 100 = normal, 50 = half, 150 = 1.5x
+    // contrast: 100 = normal, 50 = low, 150 = high
+    const brightnessFactor = brightness / 100;
+    const contrastFactor = (contrast / 100);
+    
+    // Pre-calculate contrast adjustment
+    // contrast formula: (value - 128) * contrastFactor + 128
+    const contrastMult = contrastFactor;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        // Apply brightness first
+        let r = data[i] * brightnessFactor;
+        let g = data[i + 1] * brightnessFactor;
+        let b = data[i + 2] * brightnessFactor;
+        
+        // Apply contrast
+        r = (r - 128) * contrastMult + 128;
+        g = (g - 128) * contrastMult + 128;
+        b = (b - 128) * contrastMult + 128;
+        
+        // Clamp values
+        data[i] = Math.max(0, Math.min(255, r));
+        data[i + 1] = Math.max(0, Math.min(255, g));
+        data[i + 2] = Math.max(0, Math.min(255, b));
+    }
+}
+
+// Apply threshold directly to pixel data
+function applyThresholdToData(data, thresholdValue) {
+    // Get colors from PARAMS
+    const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
+    const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
+    
+    const darkRGB = hexToRGB(textColor);
+    const lightRGB = hexToRGB(backColor);
+    
+    for (let i = 0; i < data.length; i += 4) {
+        // Fast grayscale (approximate)
+        const gray = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+        
+        if (gray > thresholdValue) {
+            data[i] = lightRGB.r;
+            data[i + 1] = lightRGB.g;
+            data[i + 2] = lightRGB.b;
+        } else {
+            data[i] = darkRGB.r;
+            data[i + 1] = darkRGB.g;
+            data[i + 2] = darkRGB.b;
+        }
+    }
+}
+
+// CSS filter fallback for Safari when canvas is tainted
+function applyCSSFilterFallback(fx) {
+    const canvasElement = document.querySelector('.canvas-content canvas');
+    if (!canvasElement) return;
+    
+    let cssFilterString = '';
+    
+    if (fx.brightness !== 100) {
+        cssFilterString += `brightness(${fx.brightness / 100}) `;
+    }
+    
+    if (fx.contrast !== 100) {
+        cssFilterString += `contrast(${fx.contrast / 100}) `;
+    }
+    
+    if (fx.blurEnabled && fx.blur > 0) {
+        cssFilterString += `blur(${fx.blur}px) `;
+    }
+    
+    // For threshold, use extreme contrast
+    if (fx.thresholdEnabled && fx.threshold > 0) {
+        const normalizedThresh = (fx.threshold - 30) / 50;
+        const contrastValue = 15 + (normalizedThresh * 10);
+        cssFilterString += `grayscale(100%) contrast(${contrastValue}) `;
+    }
+    
+    canvasElement.style.filter = cssFilterString.trim() || 'none';
 }
 
 // Helper function to convert hex to RGB
@@ -333,12 +403,11 @@ function hexToRGB(hex) {
 // ============================================
 
 // Apply Floyd-Steinberg dithering effect
-// Safari-compatible version using canvas API directly
+// Works on the ALREADY PROCESSED canvas (after threshold)
+// Adds halftone-like pattern to the B/W image
 function applyDithering() {
     const dith = PARAMS.dithering;
     if (!dith.enabled || dith.dots < 1) return;
-
-    // NOTE: Don't bypass Safari - try getImageData first, only fallback if it fails
 
     const scale = dith.dots;
     const spread = dith.spread;
@@ -361,15 +430,17 @@ function applyDithering() {
     let imageData;
     try {
         imageData = ctx.getImageData(0, 0, w, h);
-        canvasIsTainted = false;
     } catch (e) {
         // Canvas is tainted - use CSS fallback
         console.warn('Dithering: using CSS filter fallback for Safari');
-        canvasIsTainted = true;
         applyDitheringCSSFallback(scale, contrastMult);
         return;
     }
-    const data = imageData.data;
+    
+    let data = imageData.data;
+
+    // NOTE: blur/brightness/contrast/threshold are already applied by applyImageEffects()
+    // Dithering now works on the result of those effects
 
     // Work on scaled down version for performance
     const scaledW = Math.floor(w / scale);
@@ -446,9 +517,9 @@ function applyDithering() {
                     const destY = y * scale + dy;
                     if (destX < w && destY < h) {
                         const destIdx = (destY * w + destX) * 4;
-                        data[destIdx] = rgb.r;
-                        data[destIdx + 1] = rgb.g;
-                        data[destIdx + 2] = rgb.b;
+                        imageData.data[destIdx] = rgb.r;
+                        imageData.data[destIdx + 1] = rgb.g;
+                        imageData.data[destIdx + 2] = rgb.b;
                     }
                 }
             }
