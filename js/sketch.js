@@ -17,6 +17,17 @@ let isAnimating = false;
 // Flag to track if canvas is tainted (for Safari fallback)
 let canvasIsTainted = false;
 
+// Reusable buffers for performance (avoid allocations every frame)
+let blurBuffer1 = null;
+let blurBuffer2 = null;
+let grayBuffer = null;
+let lastBufferSize = 0;
+
+// LUT (Look-Up Table) for brightness/contrast - much faster than per-pixel math
+let bcLUT = null;
+let lastBrightness = -1;
+let lastContrast = -1;
+
 // Images system
 let images = [];
 let isDraggingImage = false;
@@ -238,120 +249,154 @@ function applyImageEffects() {
     }
 }
 
-// Box blur implementation (fast approximation of Gaussian blur)
+// Box blur implementation - OPTIMIZED with sliding window O(n) instead of O(n*radius)
 function applyBoxBlur(data, w, h, radius) {
     if (radius < 1) return data;
     
     // Limit radius for performance
-    radius = Math.min(radius, 20);
+    radius = Math.min(radius, 15);
     
-    const output = new Uint8ClampedArray(data.length);
+    const size = data.length;
     
-    // Horizontal pass
+    // Reuse buffers if same size
+    if (size !== lastBufferSize) {
+        blurBuffer1 = new Uint8ClampedArray(size);
+        blurBuffer2 = new Uint8ClampedArray(size);
+        lastBufferSize = size;
+    }
+    
+    const output = blurBuffer1;
+    const final = blurBuffer2;
+    const diameter = radius * 2 + 1;
+    const invDiameter = 1 / diameter;
+    
+    // Horizontal pass with sliding window
     for (let y = 0; y < h; y++) {
+        const rowOffset = y * w * 4;
+        let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+        
+        // Initialize window
+        for (let i = -radius; i <= radius; i++) {
+            const x = Math.max(0, Math.min(w - 1, i));
+            const idx = rowOffset + x * 4;
+            rSum += data[idx];
+            gSum += data[idx + 1];
+            bSum += data[idx + 2];
+            aSum += data[idx + 3];
+        }
+        
+        // Slide window across row
         for (let x = 0; x < w; x++) {
-            let r = 0, g = 0, b = 0, a = 0, count = 0;
+            const outIdx = rowOffset + x * 4;
+            output[outIdx] = rSum * invDiameter;
+            output[outIdx + 1] = gSum * invDiameter;
+            output[outIdx + 2] = bSum * invDiameter;
+            output[outIdx + 3] = aSum * invDiameter;
             
-            for (let dx = -radius; dx <= radius; dx++) {
-                const nx = x + dx;
-                if (nx >= 0 && nx < w) {
-                    const idx = (y * w + nx) * 4;
-                    r += data[idx];
-                    g += data[idx + 1];
-                    b += data[idx + 2];
-                    a += data[idx + 3];
-                    count++;
-                }
-            }
+            // Remove left pixel, add right pixel
+            const leftX = Math.max(0, x - radius);
+            const rightX = Math.min(w - 1, x + radius + 1);
+            const leftIdx = rowOffset + leftX * 4;
+            const rightIdx = rowOffset + rightX * 4;
             
-            const outIdx = (y * w + x) * 4;
-            output[outIdx] = r / count;
-            output[outIdx + 1] = g / count;
-            output[outIdx + 2] = b / count;
-            output[outIdx + 3] = a / count;
+            rSum += data[rightIdx] - data[leftIdx];
+            gSum += data[rightIdx + 1] - data[leftIdx + 1];
+            bSum += data[rightIdx + 2] - data[leftIdx + 2];
+            aSum += data[rightIdx + 3] - data[leftIdx + 3];
         }
     }
     
-    // Vertical pass (on output from horizontal)
-    const final = new Uint8ClampedArray(data.length);
-    
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            let r = 0, g = 0, b = 0, a = 0, count = 0;
-            
-            for (let dy = -radius; dy <= radius; dy++) {
-                const ny = y + dy;
-                if (ny >= 0 && ny < h) {
-                    const idx = (ny * w + x) * 4;
-                    r += output[idx];
-                    g += output[idx + 1];
-                    b += output[idx + 2];
-                    a += output[idx + 3];
-                    count++;
-                }
-            }
-            
+    // Vertical pass with sliding window
+    for (let x = 0; x < w; x++) {
+        let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+        
+        // Initialize window
+        for (let i = -radius; i <= radius; i++) {
+            const y = Math.max(0, Math.min(h - 1, i));
+            const idx = (y * w + x) * 4;
+            rSum += output[idx];
+            gSum += output[idx + 1];
+            bSum += output[idx + 2];
+            aSum += output[idx + 3];
+        }
+        
+        // Slide window down column
+        for (let y = 0; y < h; y++) {
             const outIdx = (y * w + x) * 4;
-            final[outIdx] = r / count;
-            final[outIdx + 1] = g / count;
-            final[outIdx + 2] = b / count;
-            final[outIdx + 3] = a / count;
+            final[outIdx] = rSum * invDiameter;
+            final[outIdx + 1] = gSum * invDiameter;
+            final[outIdx + 2] = bSum * invDiameter;
+            final[outIdx + 3] = aSum * invDiameter;
+            
+            // Remove top pixel, add bottom pixel
+            const topY = Math.max(0, y - radius);
+            const bottomY = Math.min(h - 1, y + radius + 1);
+            const topIdx = (topY * w + x) * 4;
+            const bottomIdx = (bottomY * w + x) * 4;
+            
+            rSum += output[bottomIdx] - output[topIdx];
+            gSum += output[bottomIdx + 1] - output[topIdx + 1];
+            bSum += output[bottomIdx + 2] - output[topIdx + 2];
+            aSum += output[bottomIdx + 3] - output[topIdx + 3];
         }
     }
     
     return final;
 }
 
-// Apply brightness and contrast to pixel data
+// Apply brightness and contrast using LUT (Look-Up Table) - MUCH faster
 function applyBrightnessContrast(data, brightness, contrast) {
-    // brightness: 100 = normal, 50 = half, 150 = 1.5x
-    // contrast: 100 = normal, 50 = low, 150 = high
-    const brightnessFactor = brightness / 100;
-    const contrastFactor = (contrast / 100);
+    // Rebuild LUT only if values changed
+    if (brightness !== lastBrightness || contrast !== lastContrast) {
+        bcLUT = new Uint8ClampedArray(256);
+        const brightnessFactor = brightness / 100;
+        const contrastFactor = contrast / 100;
+        
+        for (let i = 0; i < 256; i++) {
+            let val = i * brightnessFactor;
+            val = (val - 128) * contrastFactor + 128;
+            bcLUT[i] = Math.max(0, Math.min(255, val));
+        }
+        
+        lastBrightness = brightness;
+        lastContrast = contrast;
+    }
     
-    // Pre-calculate contrast adjustment
-    // contrast formula: (value - 128) * contrastFactor + 128
-    const contrastMult = contrastFactor;
-    
+    // Apply LUT - simple array lookup, no math per pixel
     for (let i = 0; i < data.length; i += 4) {
-        // Apply brightness first
-        let r = data[i] * brightnessFactor;
-        let g = data[i + 1] * brightnessFactor;
-        let b = data[i + 2] * brightnessFactor;
-        
-        // Apply contrast
-        r = (r - 128) * contrastMult + 128;
-        g = (g - 128) * contrastMult + 128;
-        b = (b - 128) * contrastMult + 128;
-        
-        // Clamp values
-        data[i] = Math.max(0, Math.min(255, r));
-        data[i + 1] = Math.max(0, Math.min(255, g));
-        data[i + 2] = Math.max(0, Math.min(255, b));
+        data[i] = bcLUT[data[i]];
+        data[i + 1] = bcLUT[data[i + 1]];
+        data[i + 2] = bcLUT[data[i + 2]];
     }
 }
 
-// Apply threshold directly to pixel data
+// Apply threshold directly to pixel data - OPTIMIZED with local vars
 function applyThresholdToData(data, thresholdValue) {
-    // Get colors from PARAMS
+    // Get colors from PARAMS - cache in local vars
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
     const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
     
     const darkRGB = hexToRGB(textColor);
     const lightRGB = hexToRGB(backColor);
     
-    for (let i = 0; i < data.length; i += 4) {
-        // Fast grayscale (approximate)
+    // Cache in local variables for faster access
+    const darkR = darkRGB.r, darkG = darkRGB.g, darkB = darkRGB.b;
+    const lightR = lightRGB.r, lightG = lightRGB.g, lightB = lightRGB.b;
+    const thresh = thresholdValue;
+    const len = data.length;
+    
+    for (let i = 0; i < len; i += 4) {
+        // Fast grayscale using bit shift
         const gray = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
         
-        if (gray > thresholdValue) {
-            data[i] = lightRGB.r;
-            data[i + 1] = lightRGB.g;
-            data[i + 2] = lightRGB.b;
+        if (gray > thresh) {
+            data[i] = lightR;
+            data[i + 1] = lightG;
+            data[i + 2] = lightB;
         } else {
-            data[i] = darkRGB.r;
-            data[i + 1] = darkRGB.g;
-            data[i + 2] = darkRGB.b;
+            data[i] = darkR;
+            data[i + 1] = darkG;
+            data[i + 2] = darkB;
         }
     }
 }
@@ -414,11 +459,13 @@ function applyDithering() {
     const contrastMult = dith.contrast / 100;
     const noiseAmt = dith.noise;
 
-    // Get colors from PARAMS
+    // Get colors from PARAMS - cache locally
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
     const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
     const darkRGB = hexToRGB(textColor);
     const lightRGB = hexToRGB(backColor);
+    const darkR = darkRGB.r, darkG = darkRGB.g, darkB = darkRGB.b;
+    const lightR = lightRGB.r, lightG = lightRGB.g, lightB = lightRGB.b;
 
     // Use canvas API directly for Safari compatibility
     const ctx = drawingContext;
@@ -431,96 +478,120 @@ function applyDithering() {
     try {
         imageData = ctx.getImageData(0, 0, w, h);
     } catch (e) {
-        // Canvas is tainted - use CSS fallback
         console.warn('Dithering: using CSS filter fallback for Safari');
         applyDitheringCSSFallback(scale, contrastMult);
         return;
     }
     
-    let data = imageData.data;
-
-    // NOTE: blur/brightness/contrast/threshold are already applied by applyImageEffects()
-    // Dithering now works on the result of those effects
+    const data = imageData.data;
 
     // Work on scaled down version for performance
     const scaledW = Math.floor(w / scale);
     const scaledH = Math.floor(h / scale);
+    const scaledSize = scaledW * scaledH;
+    
+    // Reuse gray buffer if possible
+    if (!grayBuffer || grayBuffer.length < scaledSize) {
+        grayBuffer = new Float32Array(scaledSize);
+    }
+    const gray = grayBuffer;
+    
+    // Pre-calculate scale offset
+    const halfScale = scale * 0.5 | 0;
+    
+    // Fast luminance constants
+    const lumR = 0.299 / 255;
+    const lumG = 0.587 / 255;
+    const lumB = 0.114 / 255;
 
-    // Create grayscale buffer with contrast
-    const gray = new Float32Array(scaledW * scaledH);
-
+    // Sample and create grayscale buffer
     for (let y = 0; y < scaledH; y++) {
+        const srcY = (y * scale + halfScale) | 0;
+        const rowOffset = srcY * w;
+        const grayRowOffset = y * scaledW;
+        
         for (let x = 0; x < scaledW; x++) {
-            // Sample from center of scaled pixel
-            const srcX = Math.floor(x * scale + scale / 2);
-            const srcY = Math.floor(y * scale + scale / 2);
-            const srcIdx = (srcY * w + srcX) * 4;
+            const srcX = (x * scale + halfScale) | 0;
+            const srcIdx = (rowOffset + srcX) * 4;
 
-            // Get luminance
-            const r = data[srcIdx];
-            const g = data[srcIdx + 1];
-            const b = data[srcIdx + 2];
-
-            // Calculate luminance
-            let lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+            // Fast luminance calculation
+            let lum = data[srcIdx] * lumR + data[srcIdx + 1] * lumG + data[srcIdx + 2] * lumB;
 
             // Apply contrast boost
             lum = (lum - 0.5) * contrastMult + 0.5;
-            lum = Math.max(0, Math.min(1, lum));
-
-            // Add noise
+            
+            // Add noise (only if enabled)
             if (noiseAmt > 0) {
                 lum += (Math.random() - 0.5) * noiseAmt;
-                lum = Math.max(0, Math.min(1, lum));
             }
-
-            gray[y * scaledW + x] = lum;
+            
+            // Clamp
+            gray[grayRowOffset + x] = lum < 0 ? 0 : (lum > 1 ? 1 : lum);
         }
     }
 
-    // Floyd-Steinberg dithering
+    // Floyd-Steinberg dithering with pre-calculated error weights
+    const e7_16 = 7 / 16 * spread;
+    const e3_16 = 3 / 16 * spread;
+    const e5_16 = 5 / 16 * spread;
+    const e1_16 = 1 / 16 * spread;
+    
     for (let y = 0; y < scaledH; y++) {
+        const rowIdx = y * scaledW;
+        const nextRowIdx = (y + 1) * scaledW;
+        
         for (let x = 0; x < scaledW; x++) {
-            const idx = y * scaledW + x;
+            const idx = rowIdx + x;
             const oldVal = gray[idx];
             const newVal = oldVal > 0.5 ? 1 : 0;
             gray[idx] = newVal;
 
-            const error = (oldVal - newVal) * spread;
+            const error = oldVal - newVal;
 
-            // Distribute error to neighbors
+            // Distribute error to neighbors (unrolled for speed)
             if (x + 1 < scaledW) {
-                gray[idx + 1] += error * 7 / 16;
+                gray[idx + 1] += error * e7_16;
             }
             if (y + 1 < scaledH) {
                 if (x > 0) {
-                    gray[(y + 1) * scaledW + (x - 1)] += error * 3 / 16;
+                    gray[nextRowIdx + x - 1] += error * e3_16;
                 }
-                gray[(y + 1) * scaledW + x] += error * 5 / 16;
+                gray[nextRowIdx + x] += error * e5_16;
                 if (x + 1 < scaledW) {
-                    gray[(y + 1) * scaledW + (x + 1)] += error * 1 / 16;
+                    gray[nextRowIdx + x + 1] += error * e1_16;
                 }
             }
         }
     }
 
-    // Write back to pixels at original scale
+    // Write back to pixels at original scale - optimized
+    const imgData = imageData.data;
+    
     for (let y = 0; y < scaledH; y++) {
+        const grayRowOffset = y * scaledW;
+        const baseDestY = y * scale;
+        
         for (let x = 0; x < scaledW; x++) {
-            const val = gray[y * scaledW + x] > 0.5 ? 1 : 0;
-            const rgb = val === 1 ? lightRGB : darkRGB;
+            const isLight = gray[grayRowOffset + x] > 0.5;
+            const r = isLight ? lightR : darkR;
+            const g = isLight ? lightG : darkG;
+            const b = isLight ? lightB : darkB;
+            const baseDestX = x * scale;
 
             // Fill scaled pixel block
             for (let dy = 0; dy < scale; dy++) {
+                const destY = baseDestY + dy;
+                if (destY >= h) break;
+                const destRowOffset = destY * w;
+                
                 for (let dx = 0; dx < scale; dx++) {
-                    const destX = x * scale + dx;
-                    const destY = y * scale + dy;
-                    if (destX < w && destY < h) {
-                        const destIdx = (destY * w + destX) * 4;
-                        imageData.data[destIdx] = rgb.r;
-                        imageData.data[destIdx + 1] = rgb.g;
-                        imageData.data[destIdx + 2] = rgb.b;
-                    }
+                    const destX = baseDestX + dx;
+                    if (destX >= w) break;
+                    
+                    const destIdx = (destRowOffset + destX) * 4;
+                    imgData[destIdx] = r;
+                    imgData[destIdx + 1] = g;
+                    imgData[destIdx + 2] = b;
                 }
             }
         }
