@@ -211,9 +211,12 @@ let cachedLightRGB = null;
 let cachedTextColor = null;
 let cachedBackColor = null;
 
+// Flag to track if canvas is tainted (for Safari fallback)
+let canvasIsTainted = false;
+
 // Separate threshold function - OPTIMIZED
 // Uses text color for dark pixels and background color for light pixels
-// Safari-compatible version using canvas API directly
+// Safari-compatible version with CSS filter fallback
 function applyThreshold(thresholdValue) {
     // Get colors from PARAMS
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
@@ -245,10 +248,14 @@ function applyThreshold(thresholdValue) {
     let imageData;
     try {
         imageData = ctx.getImageData(0, 0, w, h);
+        canvasIsTainted = false;
     } catch (e) {
         // Canvas is tainted (cross-origin image) or Safari security restriction
-        console.warn('Threshold effect blocked (canvas tainted or security restriction):', e.message);
-        return; // Exit gracefully without applying effect
+        console.warn('Threshold: using CSS filter fallback for Safari');
+        canvasIsTainted = true;
+        // Use CSS filter fallback for Safari
+        applyThresholdCSSFallback(thresholdValue);
+        return;
     }
     
     const data = imageData.data;
@@ -275,6 +282,33 @@ function applyThreshold(thresholdValue) {
     } catch (e) {
         console.warn('Failed to apply threshold:', e.message);
     }
+}
+
+// CSS Filter fallback for Safari when canvas is tainted
+// Uses extreme contrast + grayscale to simulate threshold effect
+function applyThresholdCSSFallback(thresholdValue) {
+    const ctx = drawingContext;
+    
+    // Create a temporary canvas to apply the filter
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width * pixelDensity();
+    tempCanvas.height = height * pixelDensity();
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Copy current canvas to temp
+    tempCtx.drawImage(ctx.canvas, 0, 0);
+    
+    // Map threshold (30-80) to contrast value
+    // Lower threshold = more black, Higher threshold = more white
+    // We use extreme contrast (10-20x) + brightness adjustment to simulate threshold
+    const normalizedThresh = (thresholdValue - 30) / 50; // 0 to 1
+    const contrastValue = 15 + (normalizedThresh * 10); // 15x to 25x contrast
+    const brightnessValue = 0.5 + (normalizedThresh * 0.5); // 0.5 to 1.0
+    
+    // Apply extreme contrast + grayscale to simulate threshold
+    ctx.filter = `grayscale(100%) contrast(${contrastValue}) brightness(${brightnessValue})`;
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.filter = 'none';
 }
 
 // Helper function to convert hex to RGB
@@ -321,10 +355,13 @@ function applyDithering() {
     let imageData;
     try {
         imageData = ctx.getImageData(0, 0, w, h);
+        canvasIsTainted = false;
     } catch (e) {
-        // Canvas is tainted (cross-origin image) or Safari security restriction
-        console.warn('Dithering effect blocked (canvas tainted or security restriction):', e.message);
-        return; // Exit gracefully without applying effect
+        // Canvas is tainted - use CSS fallback
+        console.warn('Dithering: using CSS filter fallback for Safari');
+        canvasIsTainted = true;
+        applyDitheringCSSFallback(scale, contrastMult);
+        return;
     }
     const data = imageData.data;
 
@@ -417,6 +454,30 @@ function applyDithering() {
     } catch (e) {
         console.warn('Failed to apply dithering:', e.message);
     }
+}
+
+// CSS Filter fallback for dithering on Safari when canvas is tainted
+// Uses extreme contrast + grayscale to simulate a pixelated/dithered look
+function applyDitheringCSSFallback(scale, contrastMult) {
+    const ctx = drawingContext;
+    
+    // Create a temporary canvas
+    const tempCanvas = document.createElement('canvas');
+    const d = pixelDensity();
+    tempCanvas.width = width * d;
+    tempCanvas.height = height * d;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Copy current canvas to temp
+    tempCtx.drawImage(ctx.canvas, 0, 0);
+    
+    // Apply grayscale + high contrast to simulate dithering effect
+    // The dots size affects how "chunky" the threshold looks
+    const contrastValue = 10 + (contrastMult * 5);
+    
+    ctx.filter = `grayscale(100%) contrast(${contrastValue})`;
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.filter = 'none';
 }
 
 // Make function globally available
@@ -621,9 +682,9 @@ function addImage(file) {
     // Use createObjectURL for better Safari compatibility (avoids DataURL size limits)
     const objectURL = URL.createObjectURL(file);
     
-    // Create image element with crossOrigin for canvas security
+    // Create image element
+    // NOTE: Do NOT set crossOrigin for local blob URLs - it causes Safari to taint the canvas
     const imgElement = new Image();
-    imgElement.crossOrigin = 'anonymous';
     
     imgElement.onload = function() {
         // Create p5 image from the loaded element
@@ -632,6 +693,9 @@ function addImage(file) {
         
         // Revoke object URL to free memory
         URL.revokeObjectURL(objectURL);
+        
+        // Reset canvas tainted flag since we loaded a local file
+        canvasIsTainted = false;
         
         // Calculate initial size (fit within canvas, max 50% of canvas size)
         const maxW = width * 0.5;
