@@ -230,3 +230,35 @@
     color: #000000;
     user-select: none;
 }
+
+/* Dithering Mode Toggle Dots */
+.dithering-mode-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 0.5px solid #7c7c7c;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.dithering-mode-dot.active {
+    background-color: #000000;
+}
+
+/* Cell Shape Toggle Dots */
+.cell-shape-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 0.5px solid #7c7c7c;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.cell-shape-dot.active {
+    background-color: #000000;
+}

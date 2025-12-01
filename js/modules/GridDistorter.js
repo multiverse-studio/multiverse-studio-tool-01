@@ -146,6 +146,9 @@ class GridDistorter {
         // Use black internally if effects active, otherwise use chosen color
         const cellColor = useInternalBW ? '#000000' : 
             ((PARAMS.colors && PARAMS.colors.cells) ? PARAMS.colors.cells : '#000000');
+        
+        // Check cell shape setting
+        const isCircle = PARAMS.grid.cellShape === 'circle';
 
         for (let cell of this.cells) {
             // Noise con shift organico basato sul tempo
@@ -165,15 +168,25 @@ class GridDistorter {
                 
                 // Scale factor based on gap (1 = no gap, 0.5 = 50% gap)
                 const scale = 1 - gap;
-
-                beginShape();
-                for (let corner of corners) {
-                    // Shrink towards center based on gap
-                    const newX = centerX + (corner.x - centerX) * scale;
-                    const newY = centerY + (corner.y - centerY) * scale;
-                    vertex(newX, newY);
+                
+                if (isCircle) {
+                    // Calculate cell size for circle diameter
+                    const cellWidth = Math.abs(corners[1].x - corners[0].x);
+                    const cellHeight = Math.abs(corners[2].y - corners[0].y);
+                    const diameter = Math.min(cellWidth, cellHeight) * scale;
+                    
+                    ellipse(centerX, centerY, diameter, diameter);
+                } else {
+                    // Original square/polygon drawing
+                    beginShape();
+                    for (let corner of corners) {
+                        // Shrink towards center based on gap
+                        const newX = centerX + (corner.x - centerX) * scale;
+                        const newY = centerY + (corner.y - centerY) * scale;
+                        vertex(newX, newY);
+                    }
+                    endShape(CLOSE);
                 }
-                endShape(CLOSE);
             }
         }
     }

@@ -51,9 +51,10 @@ const PARAMS = {
         blendText: false      // Blend mode on text (default off)
     },
 
-    // Dithering Effects (tab "terzo") - Floyd-Steinberg
+    // Dithering Effects (tab "terzo") - Halftone or Pixel Art
     dithering: {
         enabled: true,
+        mode: 'halftone',     // 'halftone' (circles) or 'pixel' (Floyd-Steinberg blocks)
         dots: 2,              // 2-10 scale (always enabled)
         spread: 0.825,        // 0.65-1 error diffusion (middle = 0.825)
         contrast: 100,        // 50-150% pre-contrast
@@ -91,6 +92,7 @@ const PARAMS = {
         columns: 82,          // 82% of 10-100 = ~82
         rows: 26,
         cellSize: 80,
+        cellShape: 'square',  // 'square' or 'circle'
         gap: 0.305,           // 61% of 0-0.5 = 0.305
         pattern: 'cells',
         organicShift: 1.26,   // 63% of 0-2 = 1.26

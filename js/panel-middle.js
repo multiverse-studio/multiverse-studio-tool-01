@@ -49,10 +49,18 @@ function initPanelMiddle() {
     initTabButtons();
     initHorizontalSliders();
     initEffectCheckbox();
+    initDitheringModeToggle();
+    initCellShapeToggle();
 
     // Set initial labels and positions for the active tab
     updateSliderLabels(activeTab);
     updateSliderPositions(activeTab);
+    
+    // Set initial visibility for toggles based on activeTab
+    const cellShapeContainer = document.getElementById('cell-shape-container');
+    if (cellShapeContainer) {
+        cellShapeContainer.style.display = (activeTab === 'grid') ? 'flex' : 'none';
+    }
 
     // Apply initial slider values to PARAMS after a short delay
     setTimeout(() => {
@@ -107,6 +115,80 @@ function initEffectCheckbox() {
             }
         });
     }
+}
+
+// Initialize dithering mode toggle (Halftone vs Pixel)
+function initDitheringModeToggle() {
+    const halftoneDot = document.getElementById('dithering-halftone-dot');
+    const pixelDot = document.getElementById('dithering-pixel-dot');
+    
+    if (!halftoneDot || !pixelDot) return;
+    
+    // Set initial state
+    if (PARAMS.dithering.mode === 'halftone') {
+        halftoneDot.classList.add('active');
+        pixelDot.classList.remove('active');
+    } else {
+        halftoneDot.classList.remove('active');
+        pixelDot.classList.add('active');
+    }
+    
+    // Halftone click
+    halftoneDot.addEventListener('click', () => {
+        if (PARAMS.dithering.mode !== 'halftone') {
+            PARAMS.dithering.mode = 'halftone';
+            halftoneDot.classList.add('active');
+            pixelDot.classList.remove('active');
+            if (window.optimizedRedraw) window.optimizedRedraw();
+        }
+    });
+    
+    // Pixel click
+    pixelDot.addEventListener('click', () => {
+        if (PARAMS.dithering.mode !== 'pixel') {
+            PARAMS.dithering.mode = 'pixel';
+            pixelDot.classList.add('active');
+            halftoneDot.classList.remove('active');
+            if (window.optimizedRedraw) window.optimizedRedraw();
+        }
+    });
+}
+
+// Initialize cell shape toggle (square/circle) in grid tab
+function initCellShapeToggle() {
+    const squareDot = document.getElementById('cell-square-dot');
+    const circleDot = document.getElementById('cell-circle-dot');
+    
+    if (!squareDot || !circleDot) return;
+    
+    // Set initial state
+    if (PARAMS.grid.cellShape === 'square') {
+        squareDot.classList.add('active');
+        circleDot.classList.remove('active');
+    } else {
+        squareDot.classList.remove('active');
+        circleDot.classList.add('active');
+    }
+    
+    // Square click
+    squareDot.addEventListener('click', () => {
+        if (PARAMS.grid.cellShape !== 'square') {
+            PARAMS.grid.cellShape = 'square';
+            squareDot.classList.add('active');
+            circleDot.classList.remove('active');
+            if (window.optimizedRedraw) window.optimizedRedraw();
+        }
+    });
+    
+    // Circle click
+    circleDot.addEventListener('click', () => {
+        if (PARAMS.grid.cellShape !== 'circle') {
+            PARAMS.grid.cellShape = 'circle';
+            circleDot.classList.add('active');
+            squareDot.classList.remove('active');
+            if (window.optimizedRedraw) window.optimizedRedraw();
+        }
+    });
 }
 
 // Initialize tab toggle indicators
@@ -314,10 +396,22 @@ function switchTab(tab) {
     // Update slider positions
     updateSliderPositions(tab);
 
-    // Show/hide checkbox based on tab
+    // Show/hide checkbox based on tab (threshold tab)
     const checkboxContainer = document.getElementById('apply-to-text-container');
     if (checkboxContainer) {
-        checkboxContainer.style.display = (tab === 'secondo') ? 'block' : 'none';
+        checkboxContainer.style.display = (tab === 'secondo') ? 'flex' : 'none';
+    }
+    
+    // Show/hide dithering mode toggle based on tab (dithering tab)
+    const ditheringModeContainer = document.getElementById('dithering-mode-container');
+    if (ditheringModeContainer) {
+        ditheringModeContainer.style.display = (tab === 'terzo') ? 'flex' : 'none';
+    }
+    
+    // Show/hide cell shape toggle based on tab (grid tab)
+    const cellShapeContainer = document.getElementById('cell-shape-container');
+    if (cellShapeContainer) {
+        cellShapeContainer.style.display = (tab === 'grid') ? 'flex' : 'none';
     }
 }
 

@@ -444,22 +444,184 @@ function hexToRGB(hex) {
 }
 
 // ============================================
-// FLOYD-STEINBERG DITHERING - OPTIMIZED
+// DITHERING EFFECTS - HALFTONE & PIXEL ART
 // ============================================
 
-// Apply Floyd-Steinberg dithering effect
-// Works on the ALREADY PROCESSED canvas (after threshold)
-// Adds halftone-like pattern to the B/W image
+// Main dithering function - dispatches to correct algorithm based on mode
 function applyDithering() {
     const dith = PARAMS.dithering;
     if (!dith.enabled || dith.dots < 1) return;
+    
+    if (dith.mode === 'pixel') {
+        applyPixelDithering();
+    } else {
+        applyHalftoneDithering();
+    }
+}
 
-    const scale = dith.dots;
+// HALFTONE DITHERING - Circular dots of varying sizes
+// Classic print/offset style - dark areas have big dots, light areas have small/no dots
+function applyHalftoneDithering() {
+    const dith = PARAMS.dithering;
+
+    // Map slider values:
+    // dots (2-10) -> cell size in pixels (larger dots value = bigger cells = fewer dots)
+    const cellSize = Math.max(4, Math.round(dith.dots * 2 + 3));
+    const spread = dith.spread; // Controls max dot size relative to cell (0.65-1)
+    const contrastMult = dith.contrast / 100;
+    const noiseAmt = dith.noise;
+
+    // Get colors from PARAMS
+    const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
+    const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
+    const darkRGB = hexToRGB(textColor);
+    const lightRGB = hexToRGB(backColor);
+
+    // Use canvas API directly
+    const ctx = drawingContext;
+    const d = pixelDensity();
+    const w = Math.floor(width * d);
+    const h = Math.floor(height * d);
+
+    // Get current canvas data
+    let imageData;
+    try {
+        imageData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        console.warn('Halftone: using CSS filter fallback for Safari');
+        applyDitheringCSSFallback(cellSize, contrastMult);
+        return;
+    }
+    
+    const data = imageData.data;
+
+    // Calculate grid dimensions
+    const cols = Math.ceil(w / cellSize);
+    const rows = Math.ceil(h / cellSize);
+    
+    // Luminance constants
+    const lumR = 0.299 / 255;
+    const lumG = 0.587 / 255;
+    const lumB = 0.114 / 255;
+    
+    // Create array to store cell luminosities
+    const cellCount = cols * rows;
+    if (!grayBuffer || grayBuffer.length < cellCount) {
+        grayBuffer = new Float32Array(cellCount);
+    }
+    const cellLum = grayBuffer;
+    
+    // Sample luminosity for each cell (from center)
+    const halfCell = cellSize >> 1;
+    
+    for (let row = 0; row < rows; row++) {
+        const sampleY = Math.min(h - 1, row * cellSize + halfCell);
+        const rowOffset = sampleY * w;
+        const cellRowOffset = row * cols;
+        
+        for (let col = 0; col < cols; col++) {
+            const sampleX = Math.min(w - 1, col * cellSize + halfCell);
+            const idx = (rowOffset + sampleX) * 4;
+            
+            // Calculate luminosity
+            let lum = data[idx] * lumR + data[idx + 1] * lumG + data[idx + 2] * lumB;
+            
+            // Apply contrast
+            lum = (lum - 0.5) * contrastMult + 0.5;
+            
+            // Add noise
+            if (noiseAmt > 0) {
+                lum += (Math.random() - 0.5) * noiseAmt;
+            }
+            
+            // Clamp and store
+            cellLum[cellRowOffset + col] = lum < 0 ? 0 : (lum > 1 ? 1 : lum);
+        }
+    }
+    
+    // Fill entire canvas with background (light) color
+    const lightR = lightRGB.r, lightG = lightRGB.g, lightB = lightRGB.b;
+    const darkR = darkRGB.r, darkG = darkRGB.g, darkB = darkRGB.b;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        data[i] = lightR;
+        data[i + 1] = lightG;
+        data[i + 2] = lightB;
+    }
+    
+    // Draw halftone dots
+    // Max radius is slightly less than half cell to leave small gaps
+    const maxRadius = cellSize * 0.48 * spread;
+    
+    for (let row = 0; row < rows; row++) {
+        const centerY = row * cellSize + halfCell;
+        const cellRowOffset = row * cols;
+        
+        for (let col = 0; col < cols; col++) {
+            const lum = cellLum[cellRowOffset + col];
+            
+            // Invert: dark areas = big dots, light areas = small/no dots
+            const darkness = 1 - lum;
+            
+            // Skip very light areas (no dot needed)
+            if (darkness < 0.03) continue;
+            
+            // Calculate dot radius - use sqrt for better tonal response (perceptual)
+            const radius = maxRadius * Math.sqrt(darkness);
+            
+            if (radius < 0.8) continue;
+            
+            // Center of the cell
+            const centerX = col * cellSize + halfCell;
+            
+            // Draw filled circle
+            const radiusSq = radius * radius;
+            const intRadius = Math.ceil(radius);
+            
+            // Bounds check for the circle
+            const minY = Math.max(0, centerY - intRadius);
+            const maxY = Math.min(h - 1, centerY + intRadius);
+            const minX = Math.max(0, centerX - intRadius);
+            const maxX = Math.min(w - 1, centerX + intRadius);
+            
+            for (let py = minY; py <= maxY; py++) {
+                const dy = py - centerY;
+                const dySq = dy * dy;
+                const rowOff = py * w;
+                
+                for (let px = minX; px <= maxX; px++) {
+                    const dx = px - centerX;
+                    
+                    // Check if inside circle
+                    if (dx * dx + dySq <= radiusSq) {
+                        const pixIdx = (rowOff + px) * 4;
+                        data[pixIdx] = darkR;
+                        data[pixIdx + 1] = darkG;
+                        data[pixIdx + 2] = darkB;
+                    }
+                }
+            }
+        }
+    }
+
+    try {
+        ctx.putImageData(imageData, 0, 0);
+    } catch (e) {
+        console.warn('Failed to apply halftone:', e.message);
+    }
+}
+
+// PIXEL ART DITHERING - Floyd-Steinberg algorithm
+// Creates blocky pixel art style with error diffusion
+function applyPixelDithering() {
+    const dith = PARAMS.dithering;
+    
+    const scale = Math.max(2, Math.round(dith.dots));
     const spread = dith.spread;
     const contrastMult = dith.contrast / 100;
     const noiseAmt = dith.noise;
 
-    // Get colors from PARAMS - cache locally
+    // Get colors from PARAMS
     const textColor = (PARAMS.colors && PARAMS.colors.text) ? PARAMS.colors.text : '#000000';
     const backColor = (PARAMS.colors && PARAMS.colors.back) ? PARAMS.colors.back : '#ffffff';
     const darkRGB = hexToRGB(textColor);
@@ -467,74 +629,63 @@ function applyDithering() {
     const darkR = darkRGB.r, darkG = darkRGB.g, darkB = darkRGB.b;
     const lightR = lightRGB.r, lightG = lightRGB.g, lightB = lightRGB.b;
 
-    // Use canvas API directly for Safari compatibility
     const ctx = drawingContext;
     const d = pixelDensity();
     const w = Math.floor(width * d);
     const h = Math.floor(height * d);
 
-    // Safari security: wrap getImageData in try-catch
     let imageData;
     try {
         imageData = ctx.getImageData(0, 0, w, h);
     } catch (e) {
-        console.warn('Dithering: using CSS filter fallback for Safari');
+        console.warn('Pixel dithering: using CSS fallback');
         applyDitheringCSSFallback(scale, contrastMult);
         return;
     }
     
     const data = imageData.data;
 
-    // Work on scaled down version for performance
+    // Work on scaled down version
     const scaledW = Math.floor(w / scale);
     const scaledH = Math.floor(h / scale);
     const scaledSize = scaledW * scaledH;
     
-    // Reuse gray buffer if possible
     if (!grayBuffer || grayBuffer.length < scaledSize) {
         grayBuffer = new Float32Array(scaledSize);
     }
     const gray = grayBuffer;
     
-    // Pre-calculate scale offset
-    const halfScale = scale * 0.5 | 0;
-    
-    // Fast luminance constants
+    const halfScale = scale >> 1;
     const lumR = 0.299 / 255;
     const lumG = 0.587 / 255;
     const lumB = 0.114 / 255;
 
     // Sample and create grayscale buffer
     for (let y = 0; y < scaledH; y++) {
-        const srcY = (y * scale + halfScale) | 0;
+        const srcY = Math.min(h - 1, y * scale + halfScale);
         const rowOffset = srcY * w;
         const grayRowOffset = y * scaledW;
         
         for (let x = 0; x < scaledW; x++) {
-            const srcX = (x * scale + halfScale) | 0;
+            const srcX = Math.min(w - 1, x * scale + halfScale);
             const srcIdx = (rowOffset + srcX) * 4;
 
-            // Fast luminance calculation
             let lum = data[srcIdx] * lumR + data[srcIdx + 1] * lumG + data[srcIdx + 2] * lumB;
-
-            // Apply contrast boost
             lum = (lum - 0.5) * contrastMult + 0.5;
             
-            // Add noise (only if enabled)
             if (noiseAmt > 0) {
                 lum += (Math.random() - 0.5) * noiseAmt;
             }
             
-            // Clamp
             gray[grayRowOffset + x] = lum < 0 ? 0 : (lum > 1 ? 1 : lum);
         }
     }
 
-    // Floyd-Steinberg dithering with pre-calculated error weights
-    const e7_16 = 7 / 16 * spread;
-    const e3_16 = 3 / 16 * spread;
-    const e5_16 = 5 / 16 * spread;
-    const e1_16 = 1 / 16 * spread;
+    // Floyd-Steinberg error diffusion
+    const e7 = 7 / 16 * spread;
+    const e3 = 3 / 16 * spread;
+    const e5 = 5 / 16 * spread;
+    const e1 = 1 / 16 * spread;
     
     for (let y = 0; y < scaledH; y++) {
         const rowIdx = y * scaledW;
@@ -545,28 +696,18 @@ function applyDithering() {
             const oldVal = gray[idx];
             const newVal = oldVal > 0.5 ? 1 : 0;
             gray[idx] = newVal;
-
             const error = oldVal - newVal;
 
-            // Distribute error to neighbors (unrolled for speed)
-            if (x + 1 < scaledW) {
-                gray[idx + 1] += error * e7_16;
-            }
+            if (x + 1 < scaledW) gray[idx + 1] += error * e7;
             if (y + 1 < scaledH) {
-                if (x > 0) {
-                    gray[nextRowIdx + x - 1] += error * e3_16;
-                }
-                gray[nextRowIdx + x] += error * e5_16;
-                if (x + 1 < scaledW) {
-                    gray[nextRowIdx + x + 1] += error * e1_16;
-                }
+                if (x > 0) gray[nextRowIdx + x - 1] += error * e3;
+                gray[nextRowIdx + x] += error * e5;
+                if (x + 1 < scaledW) gray[nextRowIdx + x + 1] += error * e1;
             }
         }
     }
 
-    // Write back to pixels at original scale - optimized
-    const imgData = imageData.data;
-    
+    // Write back as pixel blocks
     for (let y = 0; y < scaledH; y++) {
         const grayRowOffset = y * scaledW;
         const baseDestY = y * scale;
@@ -578,7 +719,6 @@ function applyDithering() {
             const b = isLight ? lightB : darkB;
             const baseDestX = x * scale;
 
-            // Fill scaled pixel block
             for (let dy = 0; dy < scale; dy++) {
                 const destY = baseDestY + dy;
                 if (destY >= h) break;
@@ -589,9 +729,9 @@ function applyDithering() {
                     if (destX >= w) break;
                     
                     const destIdx = (destRowOffset + destX) * 4;
-                    imgData[destIdx] = r;
-                    imgData[destIdx + 1] = g;
-                    imgData[destIdx + 2] = b;
+                    data[destIdx] = r;
+                    data[destIdx + 1] = g;
+                    data[destIdx + 2] = b;
                 }
             }
         }
@@ -600,7 +740,7 @@ function applyDithering() {
     try {
         ctx.putImageData(imageData, 0, 0);
     } catch (e) {
-        console.warn('Failed to apply dithering:', e.message);
+        console.warn('Failed to apply pixel dithering:', e.message);
     }
 }
 
@@ -891,13 +1031,16 @@ function addImage(file) {
 }
 
 // Update image positions when canvas resizes
+// Maintains aspect ratio - only updates position, not size
 function updateImagePositionsOnResize(newWidth, newHeight) {
     for (let img of images) {
         if (img.relativeX !== undefined && img.relativeY !== undefined) {
+            // Update position only
             img.x = newWidth * img.relativeX;
             img.y = newHeight * img.relativeY;
-            img.width = newWidth * img.relativeW;
-            img.height = newHeight * img.relativeH;
+            
+            // Keep the same pixel size (don't stretch)
+            // The image size stays constant, only position updates relative to canvas
         }
     }
 }

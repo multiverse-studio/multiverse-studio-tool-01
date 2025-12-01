@@ -157,11 +157,33 @@
 
                     <!-- Fixed spacer for toggle area -->
                     <div class="tab-content-spacer">
+                        <!-- Cell shape toggle (visible only in tab grid) -->
+                        <div class="apply-text-toggles-row" id="cell-shape-container" style="display: none;">
+                            <div class="apply-text-toggle-item">
+                                <div class="cell-shape-dot active" id="cell-square-dot" data-shape="square"></div>
+                                <span class="apply-text-label">SQUARE</span>
+                            </div>
+                            <div class="apply-text-toggle-item">
+                                <div class="cell-shape-dot" id="cell-circle-dot" data-shape="circle"></div>
+                                <span class="apply-text-label">CIRCLE</span>
+                            </div>
+                        </div>
                         <!-- Effect toggles (visible only in tab secondo) -->
                         <div class="apply-text-toggles-row" id="apply-to-text-container" style="display: none;">
                             <div class="apply-text-toggle-item">
                                 <div class="apply-text-dot active" id="apply-text-dot"></div>
                                 <span class="apply-text-label">APPLY TO TEXT</span>
+                            </div>
+                        </div>
+                        <!-- Dithering mode toggle (visible only in tab terzo) -->
+                        <div class="apply-text-toggles-row" id="dithering-mode-container" style="display: none;">
+                            <div class="apply-text-toggle-item">
+                                <div class="dithering-mode-dot active" id="dithering-halftone-dot" data-mode="halftone"></div>
+                                <span class="apply-text-label">HALFTONE</span>
+                            </div>
+                            <div class="apply-text-toggle-item">
+                                <div class="dithering-mode-dot" id="dithering-pixel-dot" data-mode="pixel"></div>
+                                <span class="apply-text-label">PIXEL</span>
                             </div>
                         </div>
                     </div>
