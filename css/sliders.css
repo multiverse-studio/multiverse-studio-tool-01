@@ -61,6 +61,11 @@
     transform: translateX(-50%);
     cursor: grab;
     transition: background-color 0.2s;
+    /* Safari touch compatibility */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
 }
 
 .slider-handle:active {

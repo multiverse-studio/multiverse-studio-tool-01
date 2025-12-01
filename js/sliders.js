@@ -50,8 +50,9 @@ function initSliders() {
         // Set initial value display
         initSliderValueDisplay(sliderId, initialValue);
 
-        // Add event listeners
+        // Add event listeners (mouse and touch for Safari compatibility)
         handle.addEventListener('mousedown', (e) => startDrag(e, sliderId, track, handle));
+        handle.addEventListener('touchstart', (e) => startDrag(e, sliderId, track, handle), { passive: false });
         track.addEventListener('click', (e) => handleTrackClick(e, sliderId, track, handle));
     });
     
@@ -120,6 +121,23 @@ function startDrag(e, sliderId, track, handle) {
             });
         }
     };
+    
+    // Touch move handler for Safari
+    const onTouchMove = (e) => {
+        if (sliderStates[sliderId].isDragging && e.touches.length > 0) {
+            e.preventDefault();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            animationFrameId = requestAnimationFrame(() => {
+                // Convert touch event to mouse-like event
+                const touch = e.touches[0];
+                const mouseEvent = { clientY: touch.clientY, clientX: touch.clientX };
+                updateSliderValue(mouseEvent, sliderId, track, handle);
+                animationFrameId = null;
+            });
+        }
+    };
 
     const onMouseUp = () => {
         sliderStates[sliderId].isDragging = false;
@@ -128,10 +146,15 @@ function startDrag(e, sliderId, track, handle) {
         }
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onMouseUp);
     };
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    // Safari touch support
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onMouseUp);
 }
 
 // Handle track click

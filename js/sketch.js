@@ -241,7 +241,16 @@ function applyThreshold(thresholdValue) {
     const w = Math.floor(width * pixelDensity());
     const h = Math.floor(height * pixelDensity());
 
-    const imageData = ctx.getImageData(0, 0, w, h);
+    // Safari security: wrap getImageData in try-catch
+    let imageData;
+    try {
+        imageData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        // Canvas is tainted (cross-origin image) or Safari security restriction
+        console.warn('Threshold effect blocked (canvas tainted or security restriction):', e.message);
+        return; // Exit gracefully without applying effect
+    }
+    
     const data = imageData.data;
     const thresh = thresholdValue;
 
@@ -261,7 +270,11 @@ function applyThreshold(thresholdValue) {
         }
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    try {
+        ctx.putImageData(imageData, 0, 0);
+    } catch (e) {
+        console.warn('Failed to apply threshold:', e.message);
+    }
 }
 
 // Helper function to convert hex to RGB
@@ -304,7 +317,15 @@ function applyDithering() {
     const w = Math.floor(width * d);
     const h = Math.floor(height * d);
 
-    const imageData = ctx.getImageData(0, 0, w, h);
+    // Safari security: wrap getImageData in try-catch
+    let imageData;
+    try {
+        imageData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        // Canvas is tainted (cross-origin image) or Safari security restriction
+        console.warn('Dithering effect blocked (canvas tainted or security restriction):', e.message);
+        return; // Exit gracefully without applying effect
+    }
     const data = imageData.data;
 
     // Work on scaled down version for performance
@@ -391,7 +412,11 @@ function applyDithering() {
         }
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    try {
+        ctx.putImageData(imageData, 0, 0);
+    } catch (e) {
+        console.warn('Failed to apply dithering:', e.message);
+    }
 }
 
 // Make function globally available
@@ -593,47 +618,64 @@ function drawImageSelection(img) {
 }
 
 function addImage(file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        loadImage(e.target.result, function (loadedImg) {
-            // Calculate initial size (fit within canvas, max 50% of canvas size)
-            const maxW = width * 0.5;
-            const maxH = height * 0.5;
-            let imgW = loadedImg.width;
-            let imgH = loadedImg.height;
+    // Use createObjectURL for better Safari compatibility (avoids DataURL size limits)
+    const objectURL = URL.createObjectURL(file);
+    
+    // Create image element with crossOrigin for canvas security
+    const imgElement = new Image();
+    imgElement.crossOrigin = 'anonymous';
+    
+    imgElement.onload = function() {
+        // Create p5 image from the loaded element
+        const loadedImg = createImage(imgElement.width, imgElement.height);
+        loadedImg.drawingContext.drawImage(imgElement, 0, 0);
+        
+        // Revoke object URL to free memory
+        URL.revokeObjectURL(objectURL);
+        
+        // Calculate initial size (fit within canvas, max 50% of canvas size)
+        const maxW = width * 0.5;
+        const maxH = height * 0.5;
+        let imgW = loadedImg.width;
+        let imgH = loadedImg.height;
 
-            // Scale down if too large
-            const scale = Math.min(maxW / imgW, maxH / imgH, 1);
-            imgW *= scale;
-            imgH *= scale;
+        // Scale down if too large
+        const scale = Math.min(maxW / imgW, maxH / imgH, 1);
+        imgW *= scale;
+        imgH *= scale;
 
-            const newImage = {
-                img: loadedImg,
-                x: width / 2,
-                y: height / 2,
-                relativeX: 0.5,
-                relativeY: 0.5,
-                relativeW: imgW / width,
-                relativeH: imgH / height,
-                width: imgW,
-                height: imgH,
-                originalWidth: loadedImg.width,
-                originalHeight: loadedImg.height,
-                aspectRatio: loadedImg.width / loadedImg.height,
-                zIndex: 1,
-                loaded: true
-            };
+        const newImage = {
+            img: loadedImg,
+            x: width / 2,
+            y: height / 2,
+            relativeX: 0.5,
+            relativeY: 0.5,
+            relativeW: imgW / width,
+            relativeH: imgH / height,
+            width: imgW,
+            height: imgH,
+            originalWidth: loadedImg.width,
+            originalHeight: loadedImg.height,
+            aspectRatio: loadedImg.width / loadedImg.height,
+            zIndex: 1,
+            loaded: true
+        };
 
-            images.push(newImage);
-            selectedImageIndex = images.length - 1;
+        images.push(newImage);
+        selectedImageIndex = images.length - 1;
 
-            // Deselect text when adding image
-            PARAMS.typography.selectedLayer = -1;
+        // Deselect text when adding image
+        PARAMS.typography.selectedLayer = -1;
 
-            redraw();
-        });
+        redraw();
     };
-    reader.readAsDataURL(file);
+    
+    imgElement.onerror = function() {
+        console.error('Failed to load image');
+        URL.revokeObjectURL(objectURL);
+    };
+    
+    imgElement.src = objectURL;
 }
 
 // Update image positions when canvas resizes
@@ -649,15 +691,35 @@ function updateImagePositionsOnResize(newWidth, newHeight) {
 }
 
 function openImagePicker() {
+    // Create input element
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    
+    // Safari fix: append to DOM (hidden) before clicking
+    input.style.position = 'absolute';
+    input.style.left = '-9999px';
+    input.style.top = '-9999px';
+    input.style.opacity = '0';
+    input.style.pointerEvents = 'none';
+    document.body.appendChild(input);
+    
     input.onchange = function (e) {
         if (e.target.files && e.target.files[0]) {
             addImage(e.target.files[0]);
         }
+        // Clean up: remove input from DOM after use
+        setTimeout(() => {
+            if (input.parentNode) {
+                input.parentNode.removeChild(input);
+            }
+        }, 100);
     };
-    input.click();
+    
+    // Safari: use setTimeout to ensure DOM is ready
+    setTimeout(() => {
+        input.click();
+    }, 0);
 }
 
 function isMouseOverImage(img) {

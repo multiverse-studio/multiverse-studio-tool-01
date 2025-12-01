@@ -360,8 +360,9 @@ function initHorizontalSliders() {
         updateHSliderHandle(handle, 50);
         valueDisplay.textContent = '50';
 
-        // Add event listeners
+        // Add event listeners (mouse and touch for Safari compatibility)
         handle.addEventListener('mousedown', (e) => startHSliderDrag(e, index, track, handle, valueDisplay));
+        handle.addEventListener('touchstart', (e) => startHSliderDrag(e, index, track, handle, valueDisplay), { passive: false });
         track.addEventListener('click', (e) => handleHSliderTrackClick(e, index, track, handle, valueDisplay));
     });
 }
@@ -384,6 +385,23 @@ function startHSliderDrag(e, sliderIndex, track, handle, valueDisplay) {
             animationFrameId = null;
         });
     };
+    
+    // Touch move handler for Safari
+    const onTouchMove = (e) => {
+        if (e.touches.length > 0) {
+            e.preventDefault();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            animationFrameId = requestAnimationFrame(() => {
+                // Convert touch event to mouse-like event
+                const touch = e.touches[0];
+                const mouseEvent = { clientX: touch.clientX, clientY: touch.clientY };
+                updateHSliderFromMouse(mouseEvent, sliderIndex, track, handle, valueDisplay);
+                animationFrameId = null;
+            });
+        }
+    };
 
     const onMouseUp = () => {
         if (animationFrameId) {
@@ -391,10 +409,15 @@ function startHSliderDrag(e, sliderIndex, track, handle, valueDisplay) {
         }
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onMouseUp);
     };
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    // Safari touch support
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onMouseUp);
 }
 
 // Handle track click for horizontal slider
