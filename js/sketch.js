@@ -236,8 +236,12 @@ function applyImageEffects() {
         applyBrightnessContrast(imageData.data, fx.brightness, fx.contrast);
     }
 
-    // 3. Apply threshold (if enabled and dithering is off)
-    if (hasThreshold) {
+    // 3. Apply threshold (if enabled)
+    // SKIP threshold if dithering is also enabled - dithering handles contrast itself
+    // and applying threshold first flattens the image to pure black/white, 
+    // removing the gradient info dithering needs
+    const ditheringEnabled = PARAMS.dithering && PARAMS.dithering.enabled && PARAMS.showTextEffects;
+    if (hasThreshold && !ditheringEnabled) {
         applyThresholdToData(imageData.data, fx.threshold);
     }
 
@@ -463,12 +467,24 @@ function applyDithering() {
 // Classic print/offset style - dark areas have big dots, light areas have small/no dots
 function applyHalftoneDithering() {
     const dith = PARAMS.dithering;
+    const fx = PARAMS.imageEffects;
 
     // Map slider values:
     // dots (2-10) -> cell size in pixels (larger dots value = bigger cells = fewer dots)
     const cellSize = Math.max(4, Math.round(dith.dots * 2 + 3));
     const spread = dith.spread; // Controls max dot size relative to cell (0.65-1)
-    const contrastMult = dith.contrast / 100;
+    
+    // When threshold is also enabled, boost contrast significantly
+    // This ensures dithering shows visible dots even with similar luminosity colors
+    let contrastMult = dith.contrast / 100;
+    const thresholdEnabled = fx && fx.thresholdEnabled && fx.threshold > 0;
+    if (thresholdEnabled) {
+        // Threshold value (0-100) boosts contrast: higher threshold = more contrast
+        // This maps threshold to a multiplier that increases contrast
+        const thresholdBoost = 1 + (fx.threshold / 50); // 0->1x, 50->2x, 100->3x
+        contrastMult *= thresholdBoost;
+    }
+    
     const noiseAmt = dith.noise;
 
     // Get colors from PARAMS
@@ -615,10 +631,19 @@ function applyHalftoneDithering() {
 // Creates blocky pixel art style with error diffusion
 function applyPixelDithering() {
     const dith = PARAMS.dithering;
+    const fx = PARAMS.imageEffects;
     
     const scale = Math.max(2, Math.round(dith.dots));
     const spread = dith.spread;
-    const contrastMult = dith.contrast / 100;
+    
+    // When threshold is also enabled, boost contrast significantly
+    let contrastMult = dith.contrast / 100;
+    const thresholdEnabled = fx && fx.thresholdEnabled && fx.threshold > 0;
+    if (thresholdEnabled) {
+        const thresholdBoost = 1 + (fx.threshold / 50);
+        contrastMult *= thresholdBoost;
+    }
+    
     const noiseAmt = dith.noise;
 
     // Get colors from PARAMS
