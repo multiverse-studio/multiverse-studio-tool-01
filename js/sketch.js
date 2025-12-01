@@ -102,10 +102,21 @@ function setup() {
 }
 
 function draw() {
+    // Detect Safari for CSS filter approach
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    
     // Check if threshold or dithering is active
     const thresholdActive = PARAMS.showImageEffects && PARAMS.imageEffects.thresholdEnabled;
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
     const useInternalBW = thresholdActive || ditheringActive;
+
+    // Reset CSS filter on canvas if effects are OFF (Safari)
+    if (isSafari) {
+        const canvasElement = document.querySelector('.canvas-content canvas');
+        if (canvasElement && !PARAMS.showImageEffects) {
+            canvasElement.style.filter = 'none';
+        }
+    }
 
     // Use white background internally if effects active, otherwise use chosen color
     if (useInternalBW) {
@@ -167,6 +178,9 @@ function applyImageEffects() {
     // Check if dithering is active - if so, skip threshold (dithering handles binarization)
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
 
+    // Detect Safari
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
     // Build CSS filter string for GPU-accelerated effects
     let filterString = '';
 
@@ -185,23 +199,40 @@ function applyImageEffects() {
         filterString += `blur(${fx.blur}px) `;
     }
 
-    // Apply CSS filters (fast, GPU-accelerated)
-    if (filterString) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(drawingContext.canvas, 0, 0);
+    // For Safari, apply filters directly to canvas element via CSS + SVG filter
+    // For other browsers, use canvas context filter
+    if (isSafari) {
+        // Safari: use CSS filter on canvas element with SVG filter for threshold
+        const canvasElement = document.querySelector('.canvas-content canvas');
+        if (canvasElement) {
+            let cssFilter = filterString;
+            
+            // Add threshold effect using SVG filter for Safari
+            if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
+                // Use SVG filter for true threshold effect
+                cssFilter += `grayscale(100%) url(#threshold-high) `;
+            }
+            
+            canvasElement.style.filter = cssFilter.trim() || 'none';
+        }
+    } else {
+        // Other browsers: use canvas context filter
+        if (filterString) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(drawingContext.canvas, 0, 0);
 
-        drawingContext.filter = filterString.trim();
-        drawingContext.drawImage(tempCanvas, 0, 0);
-        drawingContext.filter = 'none';
-    }
+            drawingContext.filter = filterString.trim();
+            drawingContext.drawImage(tempCanvas, 0, 0);
+            drawingContext.filter = 'none';
+        }
 
-    // Apply threshold ONLY if dithering is NOT active
-    // (dithering does its own binarization with pattern)
-    if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
-        applyThreshold(fx.threshold);
+        // Apply threshold ONLY if dithering is NOT active (non-Safari)
+        if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
+            applyThreshold(fx.threshold);
+        }
     }
 }
 
@@ -333,6 +364,19 @@ function hexToRGB(hex) {
 function applyDithering() {
     const dith = PARAMS.dithering;
     if (!dith.enabled || dith.dots < 1) return;
+
+    // Detect Safari
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    
+    // For Safari, use CSS filter approach instead of pixel manipulation
+    if (isSafari) {
+        const canvasElement = document.querySelector('.canvas-content canvas');
+        if (canvasElement) {
+            const contrastValue = 10 + (dith.contrast / 100) * 10;
+            canvasElement.style.filter = `grayscale(100%) contrast(${contrastValue})`;
+        }
+        return;
+    }
 
     const scale = dith.dots;
     const spread = dith.spread;

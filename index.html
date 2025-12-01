@@ -25,6 +25,35 @@
 </head>
 
 <body>
+    <!-- SVG Filters for Safari compatibility -->
+    <svg style="position: absolute; width: 0; height: 0; overflow: hidden;">
+        <defs>
+            <!-- Threshold filter with adjustable level -->
+            <filter id="threshold-filter" color-interpolation-filters="sRGB">
+                <feColorMatrix type="saturate" values="0"/>
+                <feComponentTransfer>
+                    <feFuncR type="discrete" tableValues="0 1"/>
+                    <feFuncG type="discrete" tableValues="0 1"/>
+                    <feFuncB type="discrete" tableValues="0 1"/>
+                </feComponentTransfer>
+            </filter>
+            <!-- High contrast threshold -->
+            <filter id="threshold-high" color-interpolation-filters="sRGB">
+                <feColorMatrix type="saturate" values="0"/>
+                <feComponentTransfer>
+                    <feFuncR type="linear" slope="20" intercept="-10"/>
+                    <feFuncG type="linear" slope="20" intercept="-10"/>
+                    <feFuncB type="linear" slope="20" intercept="-10"/>
+                </feComponentTransfer>
+                <feComponentTransfer>
+                    <feFuncR type="discrete" tableValues="0 1"/>
+                    <feFuncG type="discrete" tableValues="0 1"/>
+                    <feFuncB type="discrete" tableValues="0 1"/>
+                </feComponentTransfer>
+            </filter>
+        </defs>
+    </svg>
+    
     <div class="main-container">
         <div class="scalable-container">
             <div class="sidebar-section">
