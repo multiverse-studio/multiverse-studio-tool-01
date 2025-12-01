@@ -24,7 +24,7 @@ const tabConfig = {
 
 // Horizontal slider states (from screenshots)
 const hSliderStates = {
-    grid: [82, 61, 63, 31],    // COLS=82, GAP=61, ANIM=63, NOISE=31
+    grid: [65, 61, 63, 31],    // COLS=65, GAP=61, ANIM=63, NOISE=31
     secondo: [43, 33, 50, 50], // THRESH=43, BLUR=33, CONTR=50, BRIGHT=50
     terzo: [0, 50, 50, 0]      // DOTS=0 (off), SPREAD=50, CONTR=50, NOISE=0
 };
