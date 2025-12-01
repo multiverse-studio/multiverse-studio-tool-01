@@ -107,10 +107,12 @@ function draw() {
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
     const useInternalBW = thresholdActive || ditheringActive;
 
-    // Reset CSS filter on canvas if effects are OFF
-    const canvasElement = document.querySelector('.canvas-content canvas');
-    if (canvasElement && !PARAMS.showImageEffects && !PARAMS.showTextEffects) {
-        canvasElement.style.filter = 'none';
+    // Reset CSS filter on canvas if image effects are OFF
+    if (!PARAMS.showImageEffects) {
+        const canvasElement = document.querySelector('.canvas-content canvas');
+        if (canvasElement) {
+            canvasElement.style.filter = 'none';
+        }
     }
 
     // Use white background internally if effects active, otherwise use chosen color
@@ -173,53 +175,35 @@ function applyImageEffects() {
     // Check if dithering is active - if so, skip threshold (dithering handles binarization)
     const ditheringActive = PARAMS.showTextEffects && PARAMS.dithering && PARAMS.dithering.enabled;
 
-    // Reset any CSS filter on canvas element (will be set only if needed as fallback)
+    // Get canvas element for CSS filter approach
     const canvasElement = document.querySelector('.canvas-content canvas');
-    if (canvasElement) {
-        canvasElement.style.filter = 'none';
-    }
-
-    // Build CSS filter string for GPU-accelerated effects
-    let filterString = '';
+    
+    // Build CSS filter string for blur/brightness/contrast
+    // These will be applied via CSS on the canvas element (works on all browsers including Safari)
+    let cssFilterString = '';
 
     // Apply brightness (50-150% -> 0.5-1.5)
     if (fx.brightness !== 100) {
-        filterString += `brightness(${fx.brightness / 100}) `;
+        cssFilterString += `brightness(${fx.brightness / 100}) `;
     }
 
     // Apply contrast (50-150% -> 0.5-1.5)
     if (fx.contrast !== 100) {
-        filterString += `contrast(${fx.contrast / 100}) `;
+        cssFilterString += `contrast(${fx.contrast / 100}) `;
     }
 
-    // Apply blur
+    // Apply blur via CSS (Safari doesn't support ctx.filter for blur)
     if (fx.blurEnabled && fx.blur > 0) {
-        filterString += `blur(${fx.blur}px) `;
+        cssFilterString += `blur(${fx.blur}px) `;
     }
 
-    // Apply CSS filters using canvas context (works on most browsers)
-    if (filterString) {
-        try {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = width;
-            tempCanvas.height = height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(drawingContext.canvas, 0, 0);
-
-            drawingContext.filter = filterString.trim();
-            drawingContext.drawImage(tempCanvas, 0, 0);
-            drawingContext.filter = 'none';
-        } catch (e) {
-            // Fallback: apply filter to canvas element via CSS
-            console.warn('Using CSS filter fallback for brightness/contrast/blur');
-            if (canvasElement) {
-                canvasElement.style.filter = filterString.trim();
-            }
-        }
+    // Apply CSS filters on the canvas element (this works on Safari!)
+    if (canvasElement) {
+        canvasElement.style.filter = cssFilterString.trim() || 'none';
     }
 
-    // Apply threshold ONLY if dithering is NOT active
-    // This will try getImageData first, fallback to CSS if needed
+    // Apply threshold using pixel manipulation (after CSS filters are applied visually)
+    // NOTE: threshold works on the raw canvas data, CSS filters are applied on top by the browser
     if (fx.thresholdEnabled && fx.threshold > 0 && !ditheringActive) {
         applyThreshold(fx.threshold);
     }
