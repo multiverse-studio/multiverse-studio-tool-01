@@ -337,7 +337,7 @@ function applyInitialSliderValues() {
 
     // DOTS (scale 2-10, always enabled)
     v = terzoValues[0] / 100;
-    PARAMS.dithering.dots = Math.round(Utils.mapRange(v, 0, 1, 2, 10));
+    PARAMS.dithering.dots = Math.round(Utils.mapRange(v, 0, 1, 1/2, 10));
     PARAMS.dithering.enabled = true;
 
     // SPREAD (65-100%)
